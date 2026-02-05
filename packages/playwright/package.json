@@ -1,6 +1,6 @@
 {
   "name": "@demon-utils/playwright",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": false,
   "module": "dist/index.js",
   "types": "src/index.ts",
