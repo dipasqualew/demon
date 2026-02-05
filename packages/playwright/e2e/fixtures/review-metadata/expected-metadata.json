@@ -1,0 +1,24 @@
+{
+  "demos": [
+    {
+      "file": "login-flow.webm",
+      "summary": "Demonstrates the login flow",
+      "annotations": [
+        {
+          "timestampSeconds": 0,
+          "text": "Start of login flow"
+        }
+      ]
+    },
+    {
+      "file": "signup.webm",
+      "summary": "Demonstrates the signup process",
+      "annotations": [
+        {
+          "timestampSeconds": 0,
+          "text": "Start of signup process"
+        }
+      ]
+    }
+  ]
+}
