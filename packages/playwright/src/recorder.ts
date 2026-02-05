@@ -65,8 +65,9 @@ export class DemoRecorder {
 
   async save(outputDir: string): Promise<void> {
     const { join } = await import("node:path");
-    const { writeFileSync } = await import("node:fs");
+    const { mkdirSync, writeFileSync } = await import("node:fs");
 
+    mkdirSync(outputDir, { recursive: true });
     const filePath = join(outputDir, "demo-steps.json");
     writeFileSync(filePath, JSON.stringify(this.steps, null, 2) + "\n");
   }

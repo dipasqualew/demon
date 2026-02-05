@@ -52,18 +52,20 @@ Read the conversation context to understand what feature was built during this s
 
 Write a single `<feature-name>.demo.ts` file in the same directory as the config. The file should:
 
-- Import `{ test, expect }` from `@playwright/test`
+- Import `{ test }` from `@playwright/test` (only add `expect` if you actually assert something)
 - Import `{ DemoRecorder }` from `@demon-utils/playwright`
 - Create a `DemoRecorder` instance with `{ testStep: test.step }`
 - Use `demo.step(page, "description", { selector })` for each meaningful action to record timestamped steps
-- Call `demo.save(testInfo.outputDir)` at the end to write `demo-steps.json`
+- Call `demo.save(testInfo.outputDir)` at the end to write `demo-steps.json` (it auto-creates the directory)
 - Use realistic user interactions (click, fill, navigate)
 - Add generous `page.waitForTimeout()` pauses (800–1500ms) between actions so a human reviewer can follow along
 - Keep it focused — under 30 seconds of runtime
 
+**About the `selector` parameter in `demo.step()`:** This is a **CSS selector** passed to `document.querySelector()` — it is NOT a Playwright locator. It is used solely to position a tooltip near the element being demonstrated. Use broad, reliably-present CSS selectors like `"body"`, `"nav"`, `".main-content"`, `"form"`, `"[role=\"list\"]"`. Avoid selectors that target dynamically-rendered inner elements (e.g. `[aria-label="..."]` inside component libraries like Vuetify/MUI) — these often don't exist as top-level attributes in the DOM. When in doubt, use a parent container selector.
+
 Example structure:
 ```typescript
-import { test, expect } from "@playwright/test";
+import { test } from "@playwright/test";
 import { DemoRecorder } from "@demon-utils/playwright";
 
 test("feature demo", async ({ page }, testInfo) => {
@@ -73,7 +75,7 @@ test("feature demo", async ({ page }, testInfo) => {
   await page.goto("/feature");
   await page.waitForTimeout(1000);
 
-  await demo.step(page, "Click the button", { selector: "#btn" });
+  await demo.step(page, "Click the button", { selector: "form" });
   await page.click("#btn");
 
   await demo.save(testInfo.outputDir);
@@ -94,7 +96,7 @@ If the test failed, show the error output and offer to fix the demo file.
 
 ### 7. Generate review page
 
-Run `demon-demo-review` against the `outputDir` from the Playwright config (identified in Step 1):
+Run `demon-demo-review` against the `outputDir` from the Playwright config (identified in Step 1). The tool automatically searches subdirectories for `.webm` files (Playwright creates per-test subdirectories under `outputDir`).
 
 ```bash
 bunx demon-demo-review <outputDir>

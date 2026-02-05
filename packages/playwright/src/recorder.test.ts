@@ -1,5 +1,5 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test";
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 
@@ -116,6 +116,24 @@ describe("DemoRecorder", () => {
     beforeEach(() => {
       tmpDir = join("/tmp", "demon", "tests", `recorder-${randomUUID()}`);
       mkdirSync(tmpDir, { recursive: true });
+    });
+
+    test("creates output directory if it does not exist", async () => {
+      const { fn: mockShow } = createMockShowCommentary();
+      const demo = new DemoRecorder({ showCommentary: mockShow as never });
+      const page = createMockPage();
+
+      await demo.step(page as never, "Step 1", { selector: "#a" });
+
+      const nestedDir = join(tmpDir, "nested", "deep");
+      expect(existsSync(nestedDir)).toBe(false);
+
+      await demo.save(nestedDir);
+
+      expect(existsSync(nestedDir)).toBe(true);
+      const content = JSON.parse(readFileSync(join(nestedDir, "demo-steps.json"), "utf-8"));
+      expect(content).toHaveLength(1);
+      expect(content[0].text).toBe("Step 1");
     });
 
     test("writes correct JSON to demo-steps.json", async () => {

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { existsSync, statSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve, join, basename } from "node:path";
+import { resolve, join, basename, dirname } from "node:path";
 
 import {
   buildReviewPrompt,
@@ -36,13 +36,28 @@ if (!existsSync(resolved) || !statSync(resolved).isDirectory()) {
   process.exit(1);
 }
 
-const webmFiles = readdirSync(resolved)
+// Discover .webm files — search top-level first, then one level deep
+// (Playwright creates per-test subdirectories under outputDir)
+let webmFiles = readdirSync(resolved)
   .filter((f) => f.endsWith(".webm"))
-  .map((f) => join(resolved, f))
-  .sort();
+  .map((f) => join(resolved, f));
 
 if (webmFiles.length === 0) {
-  console.error(`Error: No .webm files found in "${resolved}".`);
+  for (const entry of readdirSync(resolved, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const subdir = join(resolved, entry.name);
+    for (const f of readdirSync(subdir)) {
+      if (f.endsWith(".webm")) {
+        webmFiles.push(join(subdir, f));
+      }
+    }
+  }
+}
+
+webmFiles.sort();
+
+if (webmFiles.length === 0) {
+  console.error(`Error: No .webm files found in "${resolved}" or its subdirectories.`);
   process.exit(1);
 }
 
@@ -50,26 +65,25 @@ for (const file of webmFiles) {
   console.log(file);
 }
 
-// Require demo-steps.json
-const stepsPath = join(resolved, "demo-steps.json");
-if (!existsSync(stepsPath)) {
-  console.error(`Error: No demo-steps.json found in "${resolved}".`);
-  console.error("Use DemoRecorder in your demo tests to generate step data.");
-  process.exit(1);
+// Collect demo-steps.json from the directory of each .webm file
+const stepsMap: Record<string, Array<{ text: string; timestampSeconds: number }>> = {};
+for (const webmFile of webmFiles) {
+  const stepsPath = join(dirname(webmFile), "demo-steps.json");
+  if (!existsSync(stepsPath)) continue;
+  try {
+    const raw = readFileSync(stepsPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      stepsMap[basename(webmFile)] = parsed;
+    }
+  } catch {
+    // skip malformed steps files
+  }
 }
 
-let steps: Array<{ text: string; timestampSeconds: number }>;
-try {
-  const raw = readFileSync(stepsPath, "utf-8");
-  steps = JSON.parse(raw);
-  if (!Array.isArray(steps)) {
-    throw new Error("demo-steps.json must be an array");
-  }
-} catch (err) {
-  console.error(
-    "Error reading demo-steps.json:",
-    err instanceof Error ? err.message : err,
-  );
+if (Object.keys(stepsMap).length === 0) {
+  console.error("Error: No demo-steps.json found alongside any .webm files.");
+  console.error("Use DemoRecorder in your demo tests to generate step data.");
   process.exit(1);
 }
 
@@ -89,12 +103,6 @@ try {
 
 try {
   const basenames = webmFiles.map((f) => basename(f));
-
-  // Build stepsMap - all videos share the same steps file for now
-  const stepsMap: Record<string, Array<{ text: string; timestampSeconds: number }>> = {};
-  for (const name of basenames) {
-    stepsMap[name] = steps;
-  }
 
   const prompt = buildReviewPrompt({ filenames: basenames, stepsMap, gitDiff, guidelines });
 
