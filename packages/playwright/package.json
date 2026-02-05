@@ -1,10 +1,13 @@
 {
   "name": "@demon-utils/playwright",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": false,
   "module": "dist/index.js",
   "types": "src/index.ts",
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "type": "module",
   "peerDependencies": {
     "@playwright/test": ">=1.40.0"
