@@ -9,7 +9,7 @@ function makeMetadata(overrides?: Partial<ReviewMetadata>): ReviewMetadata {
       {
         file: "login-flow.webm",
         summary: "Shows the login flow end to end",
-        annotations: [
+        steps: [
           { timestampSeconds: 0, text: "Page loads" },
           { timestampSeconds: 5, text: "User types credentials" },
           { timestampSeconds: 12, text: "Login succeeds" },
@@ -18,7 +18,7 @@ function makeMetadata(overrides?: Partial<ReviewMetadata>): ReviewMetadata {
       {
         file: "signup.webm",
         summary: "Demonstrates the signup process",
-        annotations: [
+        steps: [
           { timestampSeconds: 0, text: "Signup form appears" },
           { timestampSeconds: 8, text: "Form submitted" },
         ],
@@ -123,7 +123,7 @@ describe("generateReviewHtml", () => {
           {
             file: "test.webm",
             summary: "contains </script> tag",
-            annotations: [],
+            steps: [],
           },
         ],
       });
@@ -140,7 +140,7 @@ describe("generateReviewHtml", () => {
           {
             file: '<img src="x">.webm',
             summary: "normal summary",
-            annotations: [],
+            steps: [],
           },
         ],
       });
@@ -165,19 +165,19 @@ describe("generateReviewHtml", () => {
       ).toThrow("metadata.demos must not be empty");
     });
 
-    test("handles demo with many annotations", () => {
-      const annotations = Array.from({ length: 100 }, (_, i) => ({
+    test("handles demo with many steps", () => {
+      const steps = Array.from({ length: 100 }, (_, i) => ({
         timestampSeconds: i * 10,
-        text: `Annotation ${i}`,
+        text: `Step ${i}`,
       }));
       const metadata: ReviewMetadata = {
         demos: [
-          { file: "long.webm", summary: "Long demo", annotations },
+          { file: "long.webm", summary: "Long demo", steps },
         ],
       };
       const html = generateReviewHtml({ metadata });
-      expect(html).toContain("Annotation 0");
-      expect(html).toContain("Annotation 99");
+      expect(html).toContain("Step 0");
+      expect(html).toContain("Step 99");
     });
 
     test("handles single demo", () => {
@@ -186,7 +186,7 @@ describe("generateReviewHtml", () => {
           {
             file: "only.webm",
             summary: "The only demo",
-            annotations: [{ timestampSeconds: 3, text: "Something happens" }],
+            steps: [{ timestampSeconds: 3, text: "Something happens" }],
           },
         ],
       };
@@ -194,6 +194,48 @@ describe("generateReviewHtml", () => {
       expect(html).toContain('data-index="0"');
       expect(html).not.toContain('data-index="1"');
       expect(html).toContain('src="only.webm"');
+    });
+  });
+
+  describe("steps section", () => {
+    test("renders Steps section", () => {
+      const html = generateReviewHtml({ metadata: makeMetadata() });
+      expect(html).toContain('id="steps-section"');
+      expect(html).toContain('id="steps-list"');
+    });
+
+    test("includes step-active CSS class", () => {
+      const html = generateReviewHtml({ metadata: makeMetadata() });
+      expect(html).toContain("step-active");
+    });
+
+    test("includes timeupdate event handler", () => {
+      const html = generateReviewHtml({ metadata: makeMetadata() });
+      expect(html).toContain("timeupdate");
+      expect(html).toContain("#steps-list button[data-time]");
+    });
+
+    test("embeds step data in metadata JSON", () => {
+      const metadata: ReviewMetadata = {
+        demos: [
+          {
+            file: "demo.webm",
+            summary: "Demo with steps",
+            steps: [
+              { timestampSeconds: 1.5, text: "Step one" },
+            ],
+          },
+        ],
+      };
+      const html = generateReviewHtml({ metadata });
+      expect(html).toContain("Step one");
+      expect(html).toContain("1.5");
+    });
+
+    test("does not contain annotations section", () => {
+      const html = generateReviewHtml({ metadata: makeMetadata() });
+      expect(html).not.toContain("annotations-section");
+      expect(html).not.toContain("annotations-list");
     });
   });
 });

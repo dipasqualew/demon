@@ -47,10 +47,32 @@ Read the conversation context to understand what feature was built during this s
 Write a single `<feature-name>.demo.ts` file in the same directory as the config. The file should:
 
 - Import `{ test, expect }` from `@playwright/test`
-- Contain a single `test()` block that walks through the feature
+- Import `{ DemoRecorder }` from `@demon-utils/playwright`
+- Create a `DemoRecorder` instance with `{ testStep: test.step }`
+- Use `demo.step(page, "description", { selector })` for each meaningful action to record timestamped steps
+- Call `demo.save(testInfo.outputDir)` at the end to write `demo-steps.json`
 - Use realistic user interactions (click, fill, navigate)
 - Add short `page.waitForTimeout()` pauses (500–1000ms) between actions so the video is watchable
 - Keep it focused — under 30 seconds of runtime
+
+Example structure:
+```typescript
+import { test, expect } from "@playwright/test";
+import { DemoRecorder } from "@demon-utils/playwright";
+
+test("feature demo", async ({ page }, testInfo) => {
+  const demo = new DemoRecorder({ testStep: test.step });
+
+  await demo.step(page, "Navigate to page", { selector: "body" });
+  await page.goto("/feature");
+  await page.waitForTimeout(500);
+
+  await demo.step(page, "Click the button", { selector: "#btn" });
+  await page.click("#btn");
+
+  await demo.save(testInfo.outputDir);
+});
+```
 
 ### 5. Run the demo
 

@@ -1,5 +1,3 @@
-import type { ReviewMetadata } from "./review-types.ts";
-
 export type SpawnFn = (
   cmd: string[],
 ) => { exitCode: Promise<number>; stdout: ReadableStream<Uint8Array> };
@@ -9,23 +7,29 @@ export interface InvokeClaudeOptions {
   spawn?: SpawnFn;
 }
 
-export function buildReviewPrompt(filenames: string[]): string {
-  const fileList = filenames.map((f) => `- ${f}`).join("\n");
+export function buildReviewPrompt(
+  filenames: string[],
+  stepsMap: Record<string, Array<{ text: string; timestampSeconds: number }>>,
+): string {
+  const demoEntries = filenames.map((f) => {
+    const steps = stepsMap[f] ?? [];
+    const stepLines = steps
+      .map((s) => `- [${s.timestampSeconds}s] ${s.text}`)
+      .join("\n");
+    return `Video: ${f}\nRecorded steps:\n${stepLines || "(no steps recorded)"}`;
+  });
 
-  return `You are given the following .webm demo video filenames:
+  return `You are given the following .webm demo videos with their recorded steps:
 
-${fileList}
+${demoEntries.join("\n\n")}
 
-Based on the filenames, generate a JSON object matching this exact schema:
+Based on the recorded steps, generate a JSON object matching this exact schema:
 
 {
   "demos": [
     {
       "file": "<filename>",
-      "summary": "<a short sentence describing what the demo likely shows>",
-      "annotations": [
-        { "timestampSeconds": <number>, "text": "<annotation text>" }
-      ]
+      "summary": "<a meaningful sentence describing what this demo showcases based on the steps>"
     }
   ]
 }
@@ -33,8 +37,7 @@ Based on the filenames, generate a JSON object matching this exact schema:
 Rules:
 - Return ONLY the JSON object, no markdown fences or extra text.
 - Include one entry in "demos" for each filename, in the same order.
-- Infer the summary and annotations from the filename.
-- Each demo should have at least one annotation starting at timestampSeconds 0.
+- Generate a meaningful summary based on what the recorded steps describe.
 - "file" must exactly match the provided filename.`;
 }
 
@@ -68,7 +71,11 @@ export async function invokeClaude(
   return output.trim();
 }
 
-export function parseReviewMetadata(raw: string): ReviewMetadata {
+export interface LlmReviewResponse {
+  demos: Array<{ file: string; summary: string }>;
+}
+
+export function parseLlmResponse(raw: string): LlmReviewResponse {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -97,25 +104,9 @@ export function parseReviewMetadata(raw: string): ReviewMetadata {
     if (typeof d["summary"] !== "string") {
       throw new Error("Each demo must have a 'summary' string");
     }
-    if (!Array.isArray(d["annotations"])) {
-      throw new Error("Each demo must have an 'annotations' array");
-    }
-
-    for (const ann of d["annotations"] as unknown[]) {
-      if (typeof ann !== "object" || ann === null) {
-        throw new Error("Each annotation must be an object");
-      }
-      const a = ann as Record<string, unknown>;
-      if (typeof a["timestampSeconds"] !== "number") {
-        throw new Error("Each annotation must have a 'timestampSeconds' number");
-      }
-      if (typeof a["text"] !== "string") {
-        throw new Error("Each annotation must have a 'text' string");
-      }
-    }
   }
 
-  return parsed as ReviewMetadata;
+  return parsed as LlmReviewResponse;
 }
 
 function defaultSpawn(
