@@ -4,7 +4,11 @@
   "private": true,
   "module": "src/index.ts",
   "type": "module",
+  "peerDependencies": {
+    "@playwright/test": ">=1.40.0"
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@playwright/test": "^1.50.0"
   }
 }
