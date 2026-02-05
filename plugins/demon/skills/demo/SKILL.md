@@ -2,7 +2,7 @@
 name: demo
 description: Record a video demo of the feature you just built using Playwright
 disable-model-invocation: true
-allowed-tools: Bash(bunx playwright *), Write, Glob, Read, Grep
+allowed-tools: Bash(bunx playwright *), Bash(bunx demon-demo-review *), Write, Glob, Read, Grep
 ---
 
 # /demo — Record a video demo
@@ -63,3 +63,15 @@ bunx playwright test --config <config-path> <demo-file>
 After the test completes, find the `.webm` video file in the `outputDir` specified in the config (default `/tmp/demon-demos/`) and report its path to the user.
 
 If the test failed, show the error output and offer to fix the demo file.
+
+### 7. Generate review page
+
+Run `demon-demo-review` against the `outputDir` from the Playwright config (identified in Step 1):
+
+```bash
+bunx demon-demo-review <outputDir>
+```
+
+If the command succeeds, present the path to the generated `review.html` to the user.
+
+If it fails (e.g. the `claude` CLI is not available), report the error but still show the raw `.webm` video paths from Step 6 as a fallback.
