@@ -1,0 +1,5 @@
+{
+  "name": "demon",
+  "description": "Provides tooling for agents to produce meaningful demos of their work",
+  "version": "0.1.0"
+}

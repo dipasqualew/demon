@@ -1,0 +1,16 @@
+{
+  "name": "demon-marketplace",
+  "metadata": {
+    "description": "A Claude Code plugin marketplace for demon plugins"
+  },
+  "owner": {
+    "name": "dipasqualew"
+  },
+  "plugins": [
+    {
+      "name": "demon",
+      "source": "./plugins/demon",
+      "description": "Provides tooling for agents to produce meaningful demos of their work"
+    }
+  ]
+}
