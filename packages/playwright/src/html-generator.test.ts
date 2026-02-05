@@ -54,9 +54,13 @@ describe("generateReviewHtml", () => {
       expect(html).toContain('src="login-flow.webm"');
     });
 
-    test("has controls attribute", () => {
+    test("has custom controls bar instead of native controls", () => {
       const html = generateReviewHtml({ metadata: makeMetadata() });
-      expect(html).toContain("<video id=\"review-video\" controls");
+      expect(html).not.toMatch(/<video[^>]*\bcontrols\b/);
+      expect(html).toContain('class="video-controls"');
+      expect(html).toContain('id="vc-play"');
+      expect(html).toContain('id="vc-seek"');
+      expect(html).toContain('id="vc-time"');
     });
   });
 

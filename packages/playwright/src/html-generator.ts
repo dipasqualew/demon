@@ -49,7 +49,13 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
     header h1 { font-size: 1.4rem; color: #e94560; }
     .review-layout { display: flex; height: calc(100vh - 60px); }
     .video-panel { flex: 4; padding: 1rem; display: flex; align-items: center; justify-content: center; background: #0f0f23; }
-    .video-panel video { width: 100%; max-height: 100%; border-radius: 4px; }
+    .video-wrapper { position: relative; width: 100%; max-height: 100%; display: flex; flex-direction: column; }
+    .video-wrapper video { width: 100%; max-height: calc(100% - 36px); border-radius: 4px 4px 0 0; display: block; cursor: pointer; }
+    .video-controls { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #16213e; border-radius: 0 0 4px 4px; }
+    .video-controls button { background: none; border: none; color: #e0e0e0; cursor: pointer; font-size: 1rem; padding: 0; width: 20px; display: flex; align-items: center; justify-content: center; }
+    .video-controls button:hover { color: #e94560; }
+    .video-controls input[type="range"] { flex: 1; height: 4px; accent-color: #e94560; cursor: pointer; }
+    .video-controls .vc-time { font-size: 0.75rem; color: #999; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .side-panel { flex: 1; min-width: 260px; max-width: 360px; padding: 1rem; overflow-y: auto; background: #16213e; border-left: 1px solid #0f3460; }
     .side-panel h2 { font-size: 1rem; margin-bottom: 0.5rem; color: #e94560; }
     .side-panel section { margin-bottom: 1.5rem; }
@@ -72,7 +78,14 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
   </header>
   <main class="review-layout">
     <div class="video-panel">
-      <video id="review-video" controls src="${escapeAttr(firstDemo.file)}"></video>
+      <div class="video-wrapper">
+        <video id="review-video" src="${escapeAttr(firstDemo.file)}"></video>
+        <div class="video-controls">
+          <button id="vc-play" aria-label="Play">&#9654;</button>
+          <input id="vc-seek" type="range" min="0" max="100" value="0" step="0.1">
+          <span class="vc-time" id="vc-time">0:00 / 0:00</span>
+        </div>
+      </div>
     </div>
     <div class="side-panel">
       <section>
@@ -145,6 +158,49 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
       });
 
       selectDemo(0);
+
+      // Custom video controls
+      var playBtn = document.getElementById("vc-play");
+      var seekBar = document.getElementById("vc-seek");
+      var timeDisplay = document.getElementById("vc-time");
+      var seeking = false;
+
+      function fmtTime(sec) {
+        var m = Math.floor(sec / 60);
+        var s = Math.floor(sec % 60);
+        return m + ":" + (s < 10 ? "0" : "") + s;
+      }
+
+      function updateTime() {
+        var cur = video.currentTime || 0;
+        var dur = video.duration || 0;
+        timeDisplay.textContent = fmtTime(cur) + " / " + fmtTime(dur);
+        if (!seeking && dur) seekBar.value = (cur / dur) * 100;
+      }
+
+      function updatePlayBtn() {
+        playBtn.innerHTML = video.paused ? "&#9654;" : "&#9646;&#9646;";
+      }
+
+      playBtn.addEventListener("click", function() {
+        video.paused ? video.play() : video.pause();
+      });
+      video.addEventListener("click", function() {
+        video.paused ? video.play() : video.pause();
+      });
+      video.addEventListener("play", updatePlayBtn);
+      video.addEventListener("pause", updatePlayBtn);
+      video.addEventListener("ended", updatePlayBtn);
+      video.addEventListener("timeupdate", updateTime);
+      video.addEventListener("loadedmetadata", updateTime);
+
+      seekBar.addEventListener("input", function() {
+        seeking = true;
+        if (video.duration) {
+          video.currentTime = (seekBar.value / 100) * video.duration;
+        }
+      });
+      seekBar.addEventListener("change", function() { seeking = false; });
     })();
   </script>
 </body>
