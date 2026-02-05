@@ -35,7 +35,7 @@ export async function showCommentary(
         @keyframes demon-commentary-in {
           from {
             opacity: 0;
-            transform: translateY(8px);
+            transform: translateY(var(--demon-slide-y, 8px));
           }
           to {
             opacity: 1;
@@ -49,10 +49,11 @@ export async function showCommentary(
           }
           to {
             opacity: 0;
-            transform: translateY(8px);
+            transform: translateY(var(--demon-slide-y, 8px));
           }
         }
         #${tooltipId} {
+          --demon-slide-y: 8px;
           position: fixed;
           z-index: 2147483647;
           background: #1a1a2e;
@@ -74,14 +75,36 @@ export async function showCommentary(
       document.querySelector("style[data-demon-commentary]")?.remove();
       document.head.appendChild(style);
 
-      // Position below the target element, horizontally centered
-      const top = rect.bottom + 10;
-      const left = rect.left + rect.width / 2;
+      // Append hidden to measure real dimensions
+      tooltip.style.visibility = "hidden";
+      document.body.appendChild(tooltip);
+      const tooltipRect = tooltip.getBoundingClientRect();
+      const tooltipWidth = tooltipRect.width;
+      const tooltipHeight = tooltipRect.height;
+      const viewportWidth = window.innerWidth;
+
+      // Vertical: default below target, flip above if overflowing bottom
+      let top = rect.bottom + 10;
+      if (
+        top + tooltipHeight > window.innerHeight &&
+        rect.top - 10 - tooltipHeight >= 0
+      ) {
+        top = rect.top - 10 - tooltipHeight;
+        tooltip.style.setProperty("--demon-slide-y", "-8px");
+      }
+
+      // Horizontal: centered, clamped to viewport
+      const left = Math.max(
+        4,
+        Math.min(
+          rect.left + rect.width / 2 - tooltipWidth / 2,
+          viewportWidth - 4 - tooltipWidth,
+        ),
+      );
+
       tooltip.style.top = `${top}px`;
       tooltip.style.left = `${left}px`;
-      tooltip.style.transform = `translateX(-50%)`;
-
-      document.body.appendChild(tooltip);
+      tooltip.style.visibility = "";
     },
     { selector: options.selector, text: options.text, tooltipId: TOOLTIP_ID },
   );
