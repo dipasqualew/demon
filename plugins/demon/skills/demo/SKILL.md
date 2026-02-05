@@ -9,6 +9,12 @@ allowed-tools: Bash(bunx playwright *), Bash(bunx demon-demo-review *), Write, G
 
 You are tasked with creating and running a Playwright demo that records a video of the feature the user just built.
 
+## Guiding principles
+
+* **Human-reviewable pacing.** The demo will be watched by a human. Proceed at a natural speed — use generous `waitForTimeout` pauses (800–1500ms) between actions so the reviewer has time to observe each state change before the next action occurs. Never rush through interactions.
+* **Showcase every acceptance criterion.** Before writing the demo, review the issue or conversation context to identify all acceptance criteria and new capabilities. The demo must exercise each one. If an acceptance criterion is not demonstrated, the demo is incomplete.
+* **Persuade the reviewer.** A `/demo-reviewer` skill will later evaluate this recording to determine whether the work is fully complete and meets expectations. Structure the demo so that every claimed capability is visibly proven — don't just navigate past a feature, interact with it and show the result.
+
 ## Steps
 
 ### 1. Find the demo config
@@ -52,7 +58,7 @@ Write a single `<feature-name>.demo.ts` file in the same directory as the config
 - Use `demo.step(page, "description", { selector })` for each meaningful action to record timestamped steps
 - Call `demo.save(testInfo.outputDir)` at the end to write `demo-steps.json`
 - Use realistic user interactions (click, fill, navigate)
-- Add short `page.waitForTimeout()` pauses (500–1000ms) between actions so the video is watchable
+- Add generous `page.waitForTimeout()` pauses (800–1500ms) between actions so a human reviewer can follow along
 - Keep it focused — under 30 seconds of runtime
 
 Example structure:
@@ -65,7 +71,7 @@ test("feature demo", async ({ page }, testInfo) => {
 
   await demo.step(page, "Navigate to page", { selector: "body" });
   await page.goto("/feature");
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(1000);
 
   await demo.step(page, "Click the button", { selector: "#btn" });
   await page.click("#btn");

@@ -1,4 +1,4 @@
-import type { ReviewMetadata } from "./review-types.ts";
+import type { ReviewMetadata, CodeReview } from "./review-types.ts";
 
 export interface GenerateReviewHtmlOptions {
   metadata: ReviewMetadata;
@@ -16,6 +16,40 @@ function escapeHtml(s: string): string {
 
 function escapeAttr(s: string): string {
   return escapeHtml(s);
+}
+
+function renderReviewSection(review: CodeReview): string {
+  const bannerClass = review.verdict === "approve" ? "approve" : "request-changes";
+  const verdictLabel = review.verdict === "approve" ? "Approved" : "Changes Requested";
+
+  const highlightsHtml = review.highlights
+    .map((h) => `<li>${escapeHtml(h)}</li>`)
+    .join("\n          ");
+
+  const issuesHtml = review.issues.length > 0
+    ? review.issues
+        .map((issue) => {
+          const badgeLabel = issue.severity.toUpperCase();
+          return `<div class="issue ${issue.severity}"><span class="severity-badge">${badgeLabel}</span> ${escapeHtml(issue.description)}</div>`;
+        })
+        .join("\n        ")
+    : '<p class="no-issues">No issues found.</p>';
+
+  return `<section class="review-section">
+      <div class="verdict-banner ${bannerClass}">
+        <strong>${verdictLabel}</strong>: ${escapeHtml(review.verdictReason)}
+      </div>
+      <div class="review-body">
+        <h2>Summary</h2>
+        <p>${escapeHtml(review.summary)}</p>
+        <h2>Highlights</h2>
+        <ul class="highlights-list">
+          ${highlightsHtml}
+        </ul>
+        <h2>Issues</h2>
+        ${issuesHtml}
+      </div>
+    </section>`;
 }
 
 export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
@@ -36,6 +70,10 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
 
   const metadataJson = JSON.stringify(metadata).replace(/<\//g, "<\\/");
 
+  const reviewHtml = metadata.review ? renderReviewSection(metadata.review) : "";
+  const hasReview = !!metadata.review;
+  const defaultTab = hasReview ? "summary" : "demos";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -47,7 +85,32 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
     body { font-family: system-ui, -apple-system, sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; }
     header { padding: 1rem 2rem; background: #16213e; border-bottom: 1px solid #0f3460; }
     header h1 { font-size: 1.4rem; color: #e94560; }
-    .review-layout { display: flex; height: calc(100vh - 60px); }
+    .tab-bar { display: flex; gap: 0; background: #16213e; border-bottom: 2px solid #0f3460; padding: 0 2rem; }
+    .tab-btn { padding: 0.7rem 1.5rem; background: none; border: none; border-bottom: 3px solid transparent; color: #999; font-size: 0.95rem; cursor: pointer; font-family: inherit; transition: all 0.15s; margin-bottom: -2px; }
+    .tab-btn:hover { color: #e0e0e0; }
+    .tab-btn.active { color: #e94560; border-bottom-color: #e94560; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .review-section { padding: 1.5rem 2rem; }
+    .verdict-banner { padding: 1rem 1.5rem; border-radius: 6px; font-size: 1rem; margin-bottom: 1.5rem; }
+    .verdict-banner.approve { background: #1b4332; border: 1px solid #2d6a4f; color: #95d5b2; }
+    .verdict-banner.request-changes { background: #4a1520; border: 1px solid #842029; color: #f5c6cb; }
+    .review-body { max-width: 900px; }
+    .review-body h2 { font-size: 1.1rem; color: #e94560; margin: 1.2rem 0 0.5rem; }
+    .review-body p { font-size: 0.95rem; line-height: 1.6; color: #ccc; }
+    .highlights-list { list-style: disc; padding-left: 1.5rem; margin-bottom: 0.5rem; }
+    .highlights-list li { font-size: 0.95rem; line-height: 1.5; color: #95d5b2; margin-bottom: 0.3rem; }
+    .issue { padding: 0.6rem 0.8rem; margin-bottom: 0.5rem; border-radius: 4px; font-size: 0.9rem; line-height: 1.4; }
+    .issue.major { background: rgba(132, 32, 41, 0.3); border-left: 4px solid #dc3545; }
+    .issue.minor { background: rgba(255, 193, 7, 0.1); border-left: 4px solid #ffc107; }
+    .issue.nit { background: rgba(108, 117, 125, 0.2); border-left: 4px solid #6c757d; }
+    .severity-badge { display: inline-block; font-size: 0.7rem; font-weight: bold; padding: 0.15rem 0.4rem; border-radius: 3px; margin-right: 0.5rem; vertical-align: middle; }
+    .issue.major .severity-badge { background: #dc3545; color: #fff; }
+    .issue.minor .severity-badge { background: #ffc107; color: #000; }
+    .issue.nit .severity-badge { background: #6c757d; color: #fff; }
+    .no-issues { color: #95d5b2; font-style: italic; }
+    .demos-section { padding: 1rem 0; }
+    .review-layout { display: flex; height: 600px; }
     .video-panel { flex: 4; padding: 1rem; display: flex; align-items: center; justify-content: center; background: #0f0f23; }
     .video-wrapper { position: relative; width: 100%; max-height: 100%; display: flex; flex-direction: column; }
     .video-wrapper video { width: 100%; max-height: calc(100% - 36px); border-radius: 4px 4px 0 0; display: block; cursor: pointer; }
@@ -77,36 +140,60 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
   <header>
     <h1>${escapeHtml(title)}</h1>
   </header>
-  <main class="review-layout">
-    <div class="video-panel">
-      <div class="video-wrapper">
-        <video id="review-video" src="${escapeAttr(firstDemo.file)}"></video>
-        <div class="video-controls">
-          <button id="vc-play" aria-label="Play">&#9654;</button>
-          <input id="vc-seek" type="range" min="0" max="100" value="0" step="0.1">
-          <span class="vc-time" id="vc-time">0:00 / 0:00</span>
+  <nav class="tab-bar">
+    ${hasReview ? `<button class="tab-btn${defaultTab === "summary" ? " active" : ""}" data-tab="summary">Summary</button>` : ""}
+    <button class="tab-btn${defaultTab === "demos" ? " active" : ""}" data-tab="demos">Demos</button>
+  </nav>
+  <main>
+    ${hasReview ? `<div id="tab-summary" class="tab-panel${defaultTab === "summary" ? " active" : ""}">
+    ${reviewHtml}
+    </div>` : ""}
+    <div id="tab-demos" class="tab-panel${defaultTab === "demos" ? " active" : ""}">
+    <section class="demos-section">
+      <div class="review-layout">
+        <div class="video-panel">
+          <div class="video-wrapper">
+            <video id="review-video" src="${escapeAttr(firstDemo.file)}"></video>
+            <div class="video-controls">
+              <button id="vc-play" aria-label="Play">&#9654;</button>
+              <input id="vc-seek" type="range" min="0" max="100" value="0" step="0.1">
+              <span class="vc-time" id="vc-time">0:00 / 0:00</span>
+            </div>
+          </div>
+        </div>
+        <div class="side-panel">
+          <section>
+            <h2>Demos</h2>
+            <ul id="demo-list">
+            ${demoButtons}
+            </ul>
+          </section>
+          <section>
+            <h2>Summary</h2>
+            <p id="summary-text"></p>
+          </section>
+          <section id="steps-section">
+            <h2>Steps</h2>
+            <ul id="steps-list"></ul>
+          </section>
         </div>
       </div>
-    </div>
-    <div class="side-panel">
-      <section>
-        <h2>Demos</h2>
-        <ul id="demo-list">
-            ${demoButtons}
-        </ul>
-      </section>
-      <section>
-        <h2>Summary</h2>
-        <p id="summary-text"></p>
-      </section>
-      <section id="steps-section">
-        <h2>Steps</h2>
-        <ul id="steps-list"></ul>
-      </section>
+    </section>
     </div>
   </main>
   <script>
     (function() {
+      // Tab switching
+      var tabBtns = document.querySelectorAll(".tab-btn");
+      var tabPanels = document.querySelectorAll(".tab-panel");
+      tabBtns.forEach(function(btn) {
+        btn.addEventListener("click", function() {
+          var target = btn.getAttribute("data-tab");
+          tabBtns.forEach(function(b) { b.classList.toggle("active", b === btn); });
+          tabPanels.forEach(function(p) { p.classList.toggle("active", p.id === "tab-" + target); });
+        });
+      });
+
       var metadata = ${metadataJson};
       var video = document.getElementById("review-video");
       var summaryText = document.getElementById("summary-text");

@@ -8,6 +8,7 @@ import {
   parseLlmResponse,
 } from "../review.ts";
 import { generateReviewHtml } from "../html-generator.ts";
+import { getRepoContext } from "../git-context.ts";
 import type { ReviewMetadata } from "../review-types.ts";
 
 let dir: string | undefined;
@@ -72,6 +73,20 @@ try {
   process.exit(1);
 }
 
+// Gather repo context (git diff + guidelines)
+let gitDiff: string | undefined;
+let guidelines: string[] | undefined;
+try {
+  const repoContext = await getRepoContext(resolved);
+  gitDiff = repoContext.gitDiff;
+  guidelines = repoContext.guidelines;
+} catch (err) {
+  console.warn(
+    "Warning: Could not gather repo context:",
+    err instanceof Error ? err.message : err,
+  );
+}
+
 try {
   const basenames = webmFiles.map((f) => basename(f));
 
@@ -81,7 +96,7 @@ try {
     stepsMap[name] = steps;
   }
 
-  const prompt = buildReviewPrompt(basenames, stepsMap);
+  const prompt = buildReviewPrompt({ filenames: basenames, stepsMap, gitDiff, guidelines });
 
   console.log("Invoking claude to generate review metadata...");
   const rawOutput = await invokeClaude(prompt, { agent });
@@ -95,6 +110,7 @@ try {
       summary: demo.summary,
       steps: stepsMap[demo.file] ?? [],
     })),
+    review: llmResponse.review,
   };
 
   const outputPath = join(resolved, "review-metadata.json");

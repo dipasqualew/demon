@@ -36,5 +36,19 @@
         }
       ]
     }
-  ]
+  ],
+  "review": {
+    "summary": "Solid implementation of auth flows.",
+    "highlights": [
+      "Clean separation of concerns"
+    ],
+    "verdict": "approve",
+    "verdictReason": "No major issues found.",
+    "issues": [
+      {
+        "severity": "nit",
+        "description": "Consider adding aria-labels to form inputs."
+      }
+    ]
+  }
 }
