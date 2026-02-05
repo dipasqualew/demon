@@ -7,6 +7,7 @@ import {
   invokeClaude,
   parseReviewMetadata,
 } from "../review.ts";
+import { generateReviewHtml } from "../html-generator.ts";
 
 let dir: string | undefined;
 let agent: string | undefined;
@@ -58,6 +59,11 @@ try {
   const outputPath = join(resolved, "review-metadata.json");
   writeFileSync(outputPath, JSON.stringify(metadata, null, 2) + "\n");
   console.log(`Review metadata written to ${outputPath}`);
+
+  const html = generateReviewHtml({ metadata });
+  const htmlPath = join(resolved, "review.html");
+  writeFileSync(htmlPath, html);
+  console.log(resolve(htmlPath));
 } catch (err) {
   console.error(
     "Error generating review metadata:",
