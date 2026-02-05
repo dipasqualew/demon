@@ -30,7 +30,7 @@ function renderReviewSection(review: CodeReview): string {
     ? review.issues
         .map((issue) => {
           const badgeLabel = issue.severity.toUpperCase();
-          return `<div class="issue ${issue.severity}"><span class="severity-badge">${badgeLabel}</span> ${escapeHtml(issue.description)}</div>`;
+          return `<div class="issue ${issue.severity}"><span class="severity-badge">${badgeLabel}</span> <span class="issue-text">${escapeHtml(issue.description)}</span><button class="feedback-add-issue" data-issue="${escapeAttr(issue.description)}">+</button></div>`;
         })
         .join("\n        ")
     : '<p class="no-issues">No issues found.</p>';
@@ -134,6 +134,22 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
     #steps-list button:hover { color: #e94560; }
     #steps-list button.step-active { background: rgba(233, 69, 96, 0.15); color: #e94560; border-left-color: #e94560; }
     .timestamp { font-weight: bold; margin-right: 0.4rem; color: #e94560; }
+    .issue { position: relative; }
+    .feedback-add-issue { position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); background: none; border: 1px solid #53a8b6; color: #53a8b6; border-radius: 4px; cursor: pointer; font-size: 0.85rem; padding: 0.1rem 0.45rem; line-height: 1; }
+    .feedback-add-issue:hover { background: #53a8b6; color: #1a1a2e; }
+    #feedback-selection-btn { display: none; position: absolute; z-index: 1000; padding: 0.35rem 0.7rem; background: #e94560; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem; white-space: nowrap; }
+    .feedback-layout { display: flex; gap: 1.5rem; padding: 1.5rem 2rem; }
+    .feedback-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1rem; }
+    .feedback-right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+    #feedback-list { list-style: none; padding: 0; }
+    #feedback-list li { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.6rem; background: #16213e; border: 1px solid #0f3460; border-radius: 4px; margin-bottom: 0.4rem; font-size: 0.9rem; }
+    #feedback-list li span { flex: 1; }
+    .feedback-remove { background: none; border: none; color: #dc3545; cursor: pointer; font-size: 0.9rem; padding: 0 0.3rem; }
+    .feedback-remove:hover { color: #ff6b7a; }
+    #feedback-general { width: 100%; min-height: 100px; background: #16213e; color: #e0e0e0; border: 1px solid #0f3460; border-radius: 4px; padding: 0.6rem; font-family: inherit; font-size: 0.9rem; resize: vertical; }
+    #feedback-preview { background: #0f0f23; color: #ccc; border: 1px solid #0f3460; border-radius: 4px; padding: 1rem; white-space: pre-wrap; font-size: 0.85rem; line-height: 1.5; flex: 1; min-height: 200px; overflow-y: auto; }
+    #feedback-copy { align-self: flex-end; padding: 0.5rem 1rem; background: none; border: 1px solid #53a8b6; color: #53a8b6; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+    #feedback-copy:hover { background: #53a8b6; color: #1a1a2e; }
   </style>
 </head>
 <body>
@@ -143,6 +159,7 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
   <nav class="tab-bar">
     ${hasReview ? `<button class="tab-btn${defaultTab === "summary" ? " active" : ""}" data-tab="summary">Summary</button>` : ""}
     <button class="tab-btn${defaultTab === "demos" ? " active" : ""}" data-tab="demos">Demos</button>
+    ${hasReview ? `<button class="tab-btn" data-tab="feedback">Feedback</button>` : ""}
   </nav>
   <main>
     ${hasReview ? `<div id="tab-summary" class="tab-panel${defaultTab === "summary" ? " active" : ""}">
@@ -180,7 +197,23 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
       </div>
     </section>
     </div>
+    ${hasReview ? `<div id="tab-feedback" class="tab-panel">
+      <div class="feedback-layout">
+        <div class="feedback-left">
+          <h2>Feedback Items</h2>
+          <ul id="feedback-list"></ul>
+          <h2>General Feedback</h2>
+          <textarea id="feedback-general" placeholder="Add general feedback here..."></textarea>
+        </div>
+        <div class="feedback-right">
+          <h2>Preview</h2>
+          <pre id="feedback-preview"></pre>
+          <button id="feedback-copy">Copy to clipboard</button>
+        </div>
+      </div>
+    </div>` : ""}
   </main>
+  ${hasReview ? `<button id="feedback-selection-btn">Add to feedback</button>` : ""}
   <script>
     (function() {
       // Tab switching
@@ -300,6 +333,127 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
         }
       });
       seekBar.addEventListener("change", function() { seeking = false; });
+
+      // Feedback tab logic
+      if (document.getElementById("tab-feedback")) {
+        var feedbackItems = [];
+        var feedbackList = document.getElementById("feedback-list");
+        var feedbackGeneral = document.getElementById("feedback-general");
+        var feedbackPreview = document.getElementById("feedback-preview");
+        var feedbackCopy = document.getElementById("feedback-copy");
+        var selectionBtn = document.getElementById("feedback-selection-btn");
+
+        function addFeedbackItem(text) {
+          var trimmed = text.trim();
+          if (!trimmed) return;
+          for (var i = 0; i < feedbackItems.length; i++) {
+            if (feedbackItems[i] === trimmed) return;
+          }
+          feedbackItems.push(trimmed);
+          renderFeedback();
+        }
+
+        function removeFeedbackItem(index) {
+          feedbackItems.splice(index, 1);
+          renderFeedback();
+        }
+
+        function renderFeedback() {
+          var html = "";
+          feedbackItems.forEach(function(item, i) {
+            html += '<li><span>' + esc(item) + '</span><button class="feedback-remove" data-index="' + i + '">X</button></li>';
+          });
+          feedbackList.innerHTML = html;
+          updatePreview();
+        }
+
+        function updatePreview() {
+          var lines = "";
+          feedbackItems.forEach(function(item, i) {
+            lines += (i + 1) + ". Address: " + item + "\\n";
+          });
+          var general = feedbackGeneral.value.trim();
+          if (general) {
+            lines += "\\nGeneral feedback:\\n" + general;
+          }
+          feedbackPreview.textContent = lines;
+        }
+
+        // Issue "+" buttons
+        var summaryTab = document.getElementById("tab-summary");
+        if (summaryTab) {
+          summaryTab.addEventListener("click", function(e) {
+            var btn = e.target.closest(".feedback-add-issue");
+            if (btn) {
+              addFeedbackItem(btn.getAttribute("data-issue"));
+            }
+          });
+        }
+
+        // Text selection floating button
+        var selectionTimeout;
+        document.addEventListener("mouseup", function(e) {
+          clearTimeout(selectionTimeout);
+          selectionTimeout = setTimeout(function() {
+            var sel = window.getSelection();
+            var text = sel ? sel.toString().trim() : "";
+            if (!text) return;
+            var anchor = sel.anchorNode;
+            var inSummary = false;
+            var node = anchor;
+            while (node) {
+              if (node.id === "tab-summary") { inSummary = true; break; }
+              node = node.parentNode;
+            }
+            if (!inSummary) return;
+            selectionBtn.style.display = "block";
+            selectionBtn.style.left = e.pageX + "px";
+            selectionBtn.style.top = (e.pageY - 35) + "px";
+            selectionBtn._selectedText = text;
+          }, 100);
+        });
+
+        selectionBtn.addEventListener("click", function() {
+          if (selectionBtn._selectedText) {
+            addFeedbackItem(selectionBtn._selectedText);
+          }
+          selectionBtn.style.display = "none";
+          window.getSelection().removeAllRanges();
+        });
+
+        document.addEventListener("mousedown", function(e) {
+          if (e.target !== selectionBtn) {
+            selectionBtn.style.display = "none";
+          }
+        });
+
+        // Remove buttons
+        feedbackList.addEventListener("click", function(e) {
+          var btn = e.target.closest(".feedback-remove");
+          if (btn) {
+            removeFeedbackItem(parseInt(btn.getAttribute("data-index"), 10));
+          }
+        });
+
+        // Textarea input
+        feedbackGeneral.addEventListener("input", updatePreview);
+
+        // Copy button
+        feedbackCopy.addEventListener("click", function() {
+          var text = feedbackPreview.textContent;
+          function onCopied() {
+            feedbackCopy.textContent = "Copied!";
+            setTimeout(function() { feedbackCopy.textContent = "Copy to clipboard"; }, 1500);
+          }
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(onCopied, onCopied);
+          } else {
+            onCopied();
+          }
+        });
+
+        renderFeedback();
+      }
     })();
   </script>
 </body>

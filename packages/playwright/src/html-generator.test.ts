@@ -446,4 +446,116 @@ describe("generateReviewHtml", () => {
       expect(html).toContain("All tests pass and code is clean");
     });
   });
+
+  describe("feedback tab", () => {
+    test("renders Feedback tab button when review is present", () => {
+      const html = generateReviewHtml({ metadata: makeMetadata() });
+      expect(html).toContain('data-tab="feedback"');
+      expect(html).toContain(">Feedback</button>");
+    });
+
+    test("does not render Feedback tab button when review is absent", () => {
+      const html = generateReviewHtml({
+        metadata: makeMetadata({ review: undefined }),
+      });
+      expect(html).not.toContain('data-tab="feedback"');
+    });
+
+    test("renders Feedback tab panel when review is present", () => {
+      const html = generateReviewHtml({ metadata: makeMetadata() });
+      expect(html).toContain('id="tab-feedback"');
+    });
+
+    test("does not render Feedback tab panel when review is absent", () => {
+      const html = generateReviewHtml({
+        metadata: makeMetadata({ review: undefined }),
+      });
+      expect(html).not.toContain('id="tab-feedback"');
+    });
+
+    test("Feedback tab is not active by default", () => {
+      const html = generateReviewHtml({ metadata: makeMetadata() });
+      const feedbackBtn = html.match(/class="tab-btn([^"]*)"[^>]*data-tab="feedback"/);
+      expect(feedbackBtn).toBeTruthy();
+      expect(feedbackBtn![1]).not.toContain("active");
+
+      const feedbackPanel = html.match(/id="tab-feedback"[^>]*class="tab-panel([^"]*)"/);
+      expect(feedbackPanel).toBeTruthy();
+      expect(feedbackPanel![1]).not.toContain("active");
+    });
+
+    test("renders + buttons on issues matching issue count", () => {
+      const issues = [
+        { severity: "major" as const, description: "Memory leak" },
+        { severity: "minor" as const, description: "Missing test" },
+        { severity: "nit" as const, description: "Rename var" },
+      ];
+      const html = generateReviewHtml({
+        metadata: makeMetadata({ review: makeReview({ issues }) }),
+      });
+      const matches = html.match(/class="feedback-add-issue"/g);
+      expect(matches).toBeTruthy();
+      expect(matches!.length).toBe(3);
+    });
+
+    test("+ buttons have escaped data-issue attribute", () => {
+      const html = generateReviewHtml({
+        metadata: makeMetadata({
+          review: makeReview({
+            issues: [{ severity: "major", description: 'Use <b>"safe"</b> API' }],
+          }),
+        }),
+      });
+      expect(html).toContain('data-issue="Use &lt;b&gt;&quot;safe&quot;&lt;/b&gt; API"');
+    });
+
+    test("does not render + buttons when there are no issues", () => {
+      const html = generateReviewHtml({
+        metadata: makeMetadata({ review: makeReview({ issues: [] }) }),
+      });
+      expect(html).not.toContain('class="feedback-add-issue"');
+    });
+
+    test("renders floating selection button when review is present", () => {
+      const html = generateReviewHtml({ metadata: makeMetadata() });
+      expect(html).toContain('id="feedback-selection-btn"');
+    });
+
+    test("does not render floating selection button when review is absent", () => {
+      const html = generateReviewHtml({
+        metadata: makeMetadata({ review: undefined }),
+      });
+      expect(html).not.toContain('id="feedback-selection-btn"');
+    });
+
+    test("includes feedback CSS classes in output", () => {
+      const html = generateReviewHtml({ metadata: makeMetadata() });
+      expect(html).toContain(".feedback-add-issue");
+      expect(html).toContain("#feedback-selection-btn");
+      expect(html).toContain(".feedback-layout");
+      expect(html).toContain(".feedback-left");
+      expect(html).toContain(".feedback-right");
+      expect(html).toContain(".feedback-remove");
+      expect(html).toContain("#feedback-general");
+      expect(html).toContain("#feedback-preview");
+      expect(html).toContain("#feedback-copy");
+    });
+
+    test("includes feedback JS function names in output", () => {
+      const html = generateReviewHtml({ metadata: makeMetadata() });
+      expect(html).toContain("addFeedbackItem");
+      expect(html).toContain("removeFeedbackItem");
+      expect(html).toContain("renderFeedback");
+      expect(html).toContain("updatePreview");
+    });
+
+    test("feedback panel is inside main element", () => {
+      const html = generateReviewHtml({ metadata: makeMetadata() });
+      const mainIdx = html.indexOf("<main>");
+      const feedbackIdx = html.indexOf('id="tab-feedback"');
+      const mainCloseIdx = html.indexOf("</main>");
+      expect(feedbackIdx).toBeGreaterThan(mainIdx);
+      expect(feedbackIdx).toBeLessThan(mainCloseIdx);
+    });
+  });
 });
