@@ -1,0 +1,10 @@
+{
+  "name": "@demon-utils/playwright",
+  "version": "0.1.0",
+  "private": true,
+  "module": "src/index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

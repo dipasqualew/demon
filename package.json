@@ -1,0 +1,5 @@
+{
+  "name": "demon",
+  "private": true,
+  "workspaces": ["packages/*"]
+}
