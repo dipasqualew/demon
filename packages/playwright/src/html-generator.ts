@@ -59,10 +59,11 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
     #demo-list button:hover { background: #0f3460; }
     #demo-list button.active { background: #e94560; color: #fff; border-color: #e94560; }
     #summary-text { font-size: 0.9rem; line-height: 1.5; color: #ccc; }
-    #annotations-list { list-style: none; }
-    #annotations-list li { margin-bottom: 0.3rem; }
-    #annotations-list button { width: 100%; text-align: left; padding: 0.3rem 0.5rem; background: transparent; color: #53a8b6; border: none; cursor: pointer; font-size: 0.85rem; }
-    #annotations-list button:hover { color: #e94560; text-decoration: underline; }
+    #steps-list { list-style: none; }
+    #steps-list li { margin-bottom: 0.3rem; }
+    #steps-list button { width: 100%; text-align: left; padding: 0.4rem 0.6rem; background: transparent; color: #53a8b6; border: none; border-left: 3px solid transparent; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
+    #steps-list button:hover { color: #e94560; }
+    #steps-list button.step-active { background: rgba(233, 69, 96, 0.15); color: #e94560; border-left-color: #e94560; }
     .timestamp { font-weight: bold; margin-right: 0.4rem; color: #e94560; }
   </style>
 </head>
@@ -85,9 +86,9 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
         <h2>Summary</h2>
         <p id="summary-text"></p>
       </section>
-      <section>
-        <h2>Annotations</h2>
-        <ul id="annotations-list"></ul>
+      <section id="steps-section">
+        <h2>Steps</h2>
+        <ul id="steps-list"></ul>
       </section>
     </div>
   </main>
@@ -96,7 +97,7 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
       var metadata = ${metadataJson};
       var video = document.getElementById("review-video");
       var summaryText = document.getElementById("summary-text");
-      var annotationsList = document.getElementById("annotations-list");
+      var stepsList = document.getElementById("steps-list");
       var demoButtons = document.querySelectorAll("#demo-list button");
 
       function esc(s) {
@@ -121,13 +122,13 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
           btn.classList.toggle("active", i === index);
         });
 
-        var html = "";
-        demo.annotations.forEach(function(ann) {
-          html += '<li><button data-time="' + ann.timestampSeconds + '">' +
-            '<span class="timestamp">' + esc(formatTime(ann.timestampSeconds)) + '</span>' +
-            esc(ann.text) + '</button></li>';
+        var stepsHtml = "";
+        demo.steps.forEach(function(step) {
+          stepsHtml += '<li><button data-time="' + step.timestampSeconds + '">' +
+            '<span class="timestamp">' + esc(formatTime(step.timestampSeconds)) + '</span>' +
+            esc(step.text) + '</button></li>';
         });
-        annotationsList.innerHTML = html;
+        stepsList.innerHTML = stepsHtml;
       }
 
       demoButtons.forEach(function(btn) {
@@ -136,12 +137,23 @@ export function generateReviewHtml(options: GenerateReviewHtmlOptions): string {
         });
       });
 
-      annotationsList.addEventListener("click", function(e) {
+      stepsList.addEventListener("click", function(e) {
         var btn = e.target.closest("button[data-time]");
         if (btn) {
           video.currentTime = parseFloat(btn.getAttribute("data-time"));
           video.play();
         }
+      });
+
+      video.addEventListener("timeupdate", function() {
+        var buttons = document.querySelectorAll("#steps-list button[data-time]");
+        var ct = video.currentTime;
+        var activeIdx = -1;
+        buttons.forEach(function(btn, i) {
+          if (parseFloat(btn.getAttribute("data-time")) <= ct) activeIdx = i;
+          btn.classList.remove("step-active");
+        });
+        if (activeIdx >= 0) buttons[activeIdx].classList.add("step-active");
       });
 
       selectDemo(0);

@@ -3,20 +3,36 @@
     {
       "file": "login-flow.webm",
       "summary": "Demonstrates the login flow",
-      "annotations": [
+      "steps": [
         {
-          "timestampSeconds": 0,
-          "text": "Start of login flow"
+          "text": "Navigate to login page",
+          "timestampSeconds": 0
+        },
+        {
+          "text": "Enter credentials",
+          "timestampSeconds": 2.5
+        },
+        {
+          "text": "Click submit",
+          "timestampSeconds": 5
         }
       ]
     },
     {
       "file": "signup.webm",
       "summary": "Demonstrates the signup process",
-      "annotations": [
+      "steps": [
         {
-          "timestampSeconds": 0,
-          "text": "Start of signup process"
+          "text": "Navigate to login page",
+          "timestampSeconds": 0
+        },
+        {
+          "text": "Enter credentials",
+          "timestampSeconds": 2.5
+        },
+        {
+          "text": "Click submit",
+          "timestampSeconds": 5
         }
       ]
     }
