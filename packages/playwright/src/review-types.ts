@@ -1,5 +1,8 @@
+export type DemoType = "web-ux" | "log-based";
+
 export interface DemoMetadata {
   file: string;
+  type: DemoType;
   summary: string;
   steps: Array<{ timestampSeconds: number; text: string }>;
 }

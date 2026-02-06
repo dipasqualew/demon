@@ -9,12 +9,19 @@ import {
   parseLlmResponse,
 } from "../review.ts";
 import { getRepoContext } from "../git-context.ts";
-import type { ReviewMetadata } from "../review-types.ts";
+import type { ReviewMetadata, DemoType } from "../review-types.ts";
 
 interface ReviewAppData {
   metadata: ReviewMetadata;
   title: string;
   videos: Record<string, string>;
+  logs?: Record<string, string>;
+}
+
+interface DemoFile {
+  path: string;
+  filename: string;
+  type: DemoType;
 }
 
 function videoToDataUri(filePath: string): string {
@@ -71,7 +78,7 @@ for (let i = 0; i < args.length; i++) {
 
 if (!dir) {
   console.error("Usage: demon-demo-review [--agent <path>] <directory>");
-  console.error("  Discovers .webm video files in the given directory.");
+  console.error("  Discovers .webm and .jsonl demo files in the given directory.");
   process.exit(1);
 }
 
@@ -82,33 +89,49 @@ if (!existsSync(resolved) || !statSync(resolved).isDirectory()) {
   process.exit(1);
 }
 
-// Discover .webm files — search top-level first, then one level deep
+// Discover demo files (.webm and .jsonl) — search top-level first, then one level deep
 // (Playwright creates per-test subdirectories under outputDir)
-let webmFiles = readdirSync(resolved)
-  .filter((f) => f.endsWith(".webm"))
-  .map((f) => join(resolved, f));
+function discoverDemoFiles(directory: string): DemoFile[] {
+  const files: DemoFile[] = [];
 
-if (webmFiles.length === 0) {
-  for (const entry of readdirSync(resolved, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const subdir = join(resolved, entry.name);
-    for (const f of readdirSync(subdir)) {
-      if (f.endsWith(".webm")) {
-        webmFiles.push(join(subdir, f));
+  const processFile = (filePath: string, filename: string) => {
+    if (filename.endsWith(".webm")) {
+      files.push({ path: filePath, filename, type: "web-ux" });
+    } else if (filename.endsWith(".jsonl")) {
+      files.push({ path: filePath, filename, type: "log-based" });
+    }
+  };
+
+  // Search top-level
+  for (const f of readdirSync(directory)) {
+    processFile(join(directory, f), f);
+  }
+
+  // If no files found at top level, search one level deep
+  if (files.length === 0) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const subdir = join(directory, entry.name);
+      for (const f of readdirSync(subdir)) {
+        processFile(join(subdir, f), f);
       }
     }
   }
+
+  return files.sort((a, b) => a.filename.localeCompare(b.filename));
 }
 
-webmFiles.sort();
+const demoFiles = discoverDemoFiles(resolved);
+const webmFiles = demoFiles.filter((d) => d.type === "web-ux").map((d) => d.path);
+const jsonlFiles = demoFiles.filter((d) => d.type === "log-based").map((d) => d.path);
 
-if (webmFiles.length === 0) {
-  console.error(`Error: No .webm files found in "${resolved}" or its subdirectories.`);
+if (demoFiles.length === 0) {
+  console.error(`Error: No .webm or .jsonl files found in "${resolved}" or its subdirectories.`);
   process.exit(1);
 }
 
-for (const file of webmFiles) {
-  console.log(file);
+for (const file of demoFiles) {
+  console.log(file.path);
 }
 
 // Collect demo-steps.json from the directory of each .webm file
@@ -127,9 +150,25 @@ for (const webmFile of webmFiles) {
   }
 }
 
-if (Object.keys(stepsMap).length === 0) {
+// Collect JSONL content for log-based demos
+const logsMap: Record<string, string> = {};
+for (const jsonlFile of jsonlFiles) {
+  const filename = basename(jsonlFile);
+  logsMap[filename] = readFileSync(jsonlFile, "utf-8");
+}
+
+// For web-ux demos, require steps; for log-based demos, steps are optional
+const hasWebUxDemos = webmFiles.length > 0;
+const hasLogDemos = jsonlFiles.length > 0;
+
+if (hasWebUxDemos && Object.keys(stepsMap).length === 0) {
   console.error("Error: No demo-steps.json found alongside any .webm files.");
   console.error("Use DemoRecorder in your demo tests to generate step data.");
+  process.exit(1);
+}
+
+if (!hasWebUxDemos && !hasLogDemos) {
+  console.error("Error: No demo files found.");
   process.exit(1);
 }
 
@@ -148,19 +187,23 @@ try {
 }
 
 try {
-  const basenames = webmFiles.map((f) => basename(f));
+  const allFilenames = demoFiles.map((d) => d.filename);
 
-  const prompt = buildReviewPrompt({ filenames: basenames, stepsMap, gitDiff, guidelines });
+  const prompt = buildReviewPrompt({ filenames: allFilenames, stepsMap, gitDiff, guidelines });
 
   console.log("Invoking claude to generate review metadata...");
   const rawOutput = await invokeClaude(prompt, { agent });
 
   const llmResponse = parseLlmResponse(rawOutput);
 
-  // Construct final metadata by merging LLM summaries with steps
+  // Build a map of filename to type for easy lookup
+  const typeMap = new Map(demoFiles.map((d) => [d.filename, d.type]));
+
+  // Construct final metadata by merging LLM summaries with steps and type
   const metadata: ReviewMetadata = {
     demos: llmResponse.demos.map((demo) => ({
       file: demo.file,
+      type: typeMap.get(demo.file) ?? "web-ux",
       summary: demo.summary,
       steps: stepsMap[demo.file] ?? [],
     })),
@@ -184,6 +227,7 @@ try {
     metadata,
     title: "Demo Review",
     videos,
+    logs: Object.keys(logsMap).length > 0 ? logsMap : undefined,
   };
 
   const html = generateReviewHtml(appData);

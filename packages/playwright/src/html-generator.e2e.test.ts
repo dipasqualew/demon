@@ -10,6 +10,7 @@ interface ReviewAppData {
   metadata: ReviewMetadata;
   title: string;
   videos: Record<string, string>;
+  logs?: Record<string, string>;
 }
 
 const currentFile = fileURLToPath(import.meta.url);
@@ -41,6 +42,7 @@ function makeMetadata(overrides?: Partial<ReviewMetadata>): ReviewMetadata {
     demos: [
       {
         file: "login-flow.webm",
+        type: "web-ux",
         summary: "Shows the login flow end to end",
         steps: [
           { timestampSeconds: 0, text: "Page loads" },
@@ -53,11 +55,22 @@ function makeMetadata(overrides?: Partial<ReviewMetadata>): ReviewMetadata {
   };
 }
 
-function generatePage(overrides?: Partial<ReviewMetadata>): string {
+interface GeneratePageOptions {
+  metadataOverrides?: Partial<ReviewMetadata>;
+  logs?: Record<string, string>;
+}
+
+function generatePage(options: GeneratePageOptions | Partial<ReviewMetadata> = {}): string {
+  // Support legacy signature (just metadata overrides)
+  const isLegacy = !('metadataOverrides' in options) && !('logs' in options);
+  const metadataOverrides = isLegacy ? options as Partial<ReviewMetadata> : (options as GeneratePageOptions).metadataOverrides;
+  const logs = isLegacy ? undefined : (options as GeneratePageOptions).logs;
+
   const appData: ReviewAppData = {
-    metadata: makeMetadata(overrides),
+    metadata: makeMetadata(metadataOverrides),
     title: "Demo Review",
     videos: {},
+    logs,
   };
 
   const template = getTemplate();
@@ -398,6 +411,220 @@ test.describe("feedback tab e2e", () => {
       await expect(page.locator('[data-testid="feedback-general"] textarea:not([readonly])')).toHaveValue(
         "Some general notes",
       );
+    });
+  });
+});
+
+test.describe("log-based demos e2e", () => {
+  const mockLogContent = [
+    '{"timestamp":"2024-01-15T10:30:00.123Z","level":"info","message":"Starting migration..."}',
+    '{"timestamp":"2024-01-15T10:30:01.001Z","level":"info","message":"Applied migration 001","demon__highlight":true}',
+    '{"timestamp":"2024-01-15T10:30:02.001Z","level":"warn","message":"Skipping migration 002"}',
+    '{"timestamp":"2024-01-15T10:30:03.001Z","level":"error","message":"Migration failed"}',
+    '{"timestamp":"2024-01-15T10:30:04.001Z","level":"info","message":"Complete","demon__highlight":"This is the commentary text"}',
+  ].join("\n");
+
+  function generateLogPage() {
+    return generatePage({
+      metadataOverrides: {
+        demos: [
+          {
+            file: "db-migration.jsonl",
+            type: "log-based",
+            summary: "Database migration script execution",
+            steps: [],
+          },
+        ],
+      },
+      logs: {
+        "db-migration.jsonl": mockLogContent,
+      },
+    });
+  }
+
+  function generateMixedPage() {
+    return generatePage({
+      metadataOverrides: {
+        demos: [
+          {
+            file: "login-flow.webm",
+            type: "web-ux",
+            summary: "Shows the login flow end to end",
+            steps: [
+              { timestampSeconds: 0, text: "Page loads" },
+              { timestampSeconds: 5, text: "User types credentials" },
+            ],
+          },
+          {
+            file: "db-migration.jsonl",
+            type: "log-based",
+            summary: "Database migration script execution",
+            steps: [],
+          },
+        ],
+      },
+      logs: {
+        "db-migration.jsonl": mockLogContent,
+      },
+    });
+  }
+
+  test.describe("log viewer rendering", () => {
+    test("displays log viewer for log-based demo", async ({ page }) => {
+      await page.goto(generateLogPage());
+      await page.waitForSelector("#app .v-application", { timeout: 5000 });
+
+      await clickTab(page, "demos");
+
+      await expect(page.locator('[data-testid="log-viewer"]')).toBeVisible();
+      await expect(page.locator('[data-testid="video-player"]')).not.toBeVisible();
+    });
+
+    test("displays log lines with line numbers", async ({ page }) => {
+      await page.goto(generateLogPage());
+      await page.waitForSelector("#app .v-application", { timeout: 5000 });
+
+      await clickTab(page, "demos");
+
+      const logViewer = page.locator('[data-testid="log-viewer"]');
+      await expect(logViewer).toBeVisible();
+
+      // Check that log lines are present
+      const logLines = logViewer.locator(".log-line");
+      await expect(logLines).toHaveCount(5);
+
+      // Check line numbers
+      await expect(logLines.nth(0).locator(".line-number")).toContainText("1");
+      await expect(logLines.nth(4).locator(".line-number")).toContainText("5");
+    });
+
+    test("displays log messages", async ({ page }) => {
+      await page.goto(generateLogPage());
+      await page.waitForSelector("#app .v-application", { timeout: 5000 });
+
+      await clickTab(page, "demos");
+
+      const logViewer = page.locator('[data-testid="log-viewer"]');
+      await expect(logViewer).toContainText("Starting migration...");
+      await expect(logViewer).toContainText("Applied migration 001");
+      await expect(logViewer).toContainText("Migration failed");
+    });
+
+    test("displays level chips with correct colors", async ({ page }) => {
+      await page.goto(generateLogPage());
+      await page.waitForSelector("#app .v-application", { timeout: 5000 });
+
+      await clickTab(page, "demos");
+
+      const logViewer = page.locator('[data-testid="log-viewer"]');
+
+      // Check for level chips
+      await expect(logViewer.locator(".level-chip").filter({ hasText: "INFO" })).toHaveCount(3);
+      await expect(logViewer.locator(".level-chip").filter({ hasText: "WARN" })).toHaveCount(1);
+      await expect(logViewer.locator(".level-chip").filter({ hasText: "ERROR" })).toHaveCount(1);
+    });
+
+    test("highlights lines with demon__highlight: true", async ({ page }) => {
+      await page.goto(generateLogPage());
+      await page.waitForSelector("#app .v-application", { timeout: 5000 });
+
+      await clickTab(page, "demos");
+
+      const logViewer = page.locator('[data-testid="log-viewer"]');
+      const highlightedLines = logViewer.locator(".log-line--highlighted");
+
+      // Two lines have demon__highlight
+      await expect(highlightedLines).toHaveCount(2);
+    });
+
+    test("displays inline commentary for string highlights", async ({ page }) => {
+      await page.goto(generateLogPage());
+      await page.waitForSelector("#app .v-application", { timeout: 5000 });
+
+      await clickTab(page, "demos");
+
+      const logViewer = page.locator('[data-testid="log-viewer"]');
+      const commentary = logViewer.locator(".commentary");
+
+      await expect(commentary).toHaveCount(1);
+      await expect(commentary).toContainText("This is the commentary text");
+    });
+  });
+
+  test.describe("steps list visibility", () => {
+    test("hides steps list for log-based demo", async ({ page }) => {
+      await page.goto(generateLogPage());
+      await page.waitForSelector("#app .v-application", { timeout: 5000 });
+
+      await clickTab(page, "demos");
+
+      await expect(page.locator('[data-testid="log-viewer"]')).toBeVisible();
+      await expect(page.locator('[data-testid="steps-list"]')).not.toBeVisible();
+    });
+
+    test("shows steps list for web-ux demo", async ({ page }) => {
+      await page.goto(generateMixedPage());
+      await page.waitForSelector("#app .v-application", { timeout: 5000 });
+
+      await clickTab(page, "demos");
+
+      // First demo is web-ux
+      await expect(page.locator('[data-testid="video-player"]')).toBeVisible();
+      await expect(page.locator('[data-testid="steps-list"]')).toBeVisible();
+    });
+  });
+
+  test.describe("switching between demo types", () => {
+    test("switches from web-ux to log-based demo", async ({ page }) => {
+      await page.goto(generateMixedPage());
+      await page.waitForSelector("#app .v-application", { timeout: 5000 });
+
+      await clickTab(page, "demos");
+
+      // Initially shows video player (first demo is web-ux)
+      await expect(page.locator('[data-testid="video-player"]')).toBeVisible();
+      await expect(page.locator('[data-testid="log-viewer"]')).not.toBeVisible();
+
+      // Click on the second demo (log-based)
+      await page.locator('[data-testid="demo-list"] [data-testid="demo-item"]').nth(1).click();
+
+      // Should now show log viewer
+      await expect(page.locator('[data-testid="log-viewer"]')).toBeVisible();
+      await expect(page.locator('[data-testid="video-player"]')).not.toBeVisible();
+    });
+
+    test("switches from log-based to web-ux demo", async ({ page }) => {
+      await page.goto(generateMixedPage());
+      await page.waitForSelector("#app .v-application", { timeout: 5000 });
+
+      await clickTab(page, "demos");
+
+      // Click on the second demo (log-based) first
+      await page.locator('[data-testid="demo-list"] [data-testid="demo-item"]').nth(1).click();
+      await expect(page.locator('[data-testid="log-viewer"]')).toBeVisible();
+
+      // Click back to first demo (web-ux)
+      await page.locator('[data-testid="demo-list"] [data-testid="demo-item"]').nth(0).click();
+
+      // Should show video player again
+      await expect(page.locator('[data-testid="video-player"]')).toBeVisible();
+      await expect(page.locator('[data-testid="log-viewer"]')).not.toBeVisible();
+    });
+
+    test("updates summary text when switching demos", async ({ page }) => {
+      await page.goto(generateMixedPage());
+      await page.waitForSelector("#app .v-application", { timeout: 5000 });
+
+      await clickTab(page, "demos");
+
+      // Check initial summary
+      await expect(page.locator("#summary-text")).toContainText("Shows the login flow");
+
+      // Switch to log-based demo
+      await page.locator('[data-testid="demo-list"] [data-testid="demo-item"]').nth(1).click();
+
+      // Check summary updated
+      await expect(page.locator("#summary-text")).toContainText("Database migration");
     });
   });
 });

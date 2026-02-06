@@ -56,7 +56,7 @@ If the test failed, show the error output and offer to fix the demo file.
 
 ### 6. Generate review page
 
-Run `demon-demo-review` against the `outputDir` from the Playwright config (identified in Step 1). The tool automatically searches subdirectories for `.webm` files (Playwright creates per-test subdirectories under `outputDir`).
+Run `demon-demo-review` against the `outputDir` from the Playwright config (identified in Step 1). The tool automatically searches subdirectories for `.webm` and `.jsonl` files (Playwright creates per-test subdirectories under `outputDir`).
 
 ```bash
 bunx demon-demo-review <outputDir>
@@ -65,3 +65,42 @@ bunx demon-demo-review <outputDir>
 If the command succeeds, present the path to the generated `review.html` to the user.
 
 If it fails (e.g. the `claude` CLI is not available), report the error but still show the raw `.webm` video paths from Step 6 as a fallback.
+
+## Log-Based Demos
+
+For backend-heavy features with no visible UI, you can create **log-based demos** instead of video recordings. These display command output as highlighted logs with inline commentary.
+
+### Creating a Log-Based Demo
+
+1. **Capture output to a `.jsonl` file** — each line must be valid JSON:
+
+```jsonl
+{"timestamp":"2024-01-15T10:30:00.123Z","level":"info","message":"Starting migration..."}
+{"timestamp":"2024-01-15T10:30:01.001Z","level":"info","message":"Applied migration 001"}
+```
+
+2. **Add `demon__highlight` annotations** to emphasize key lines:
+
+- `"demon__highlight": true` — highlights the line with a yellow accent
+- `"demon__highlight": "Your commentary here"` — highlights the line AND shows inline commentary explaining its significance
+
+```jsonl
+{"timestamp":"...","level":"info","message":"Migration complete","demon__highlight":"Database schema updated successfully"}
+```
+
+3. **Place the `.jsonl` file** in the same `outputDir` used for Playwright demos.
+
+4. **Run `demon-demo-review`** as usual — it will discover `.jsonl` files alongside `.webm` files and include them in the review page.
+
+### JSONL Format
+
+Each line should be a JSON object. The log viewer recognizes these optional fields:
+
+| Field | Description |
+|-------|-------------|
+| `timestamp` | ISO 8601 timestamp (displayed in grey) |
+| `level` | Log level: `debug`, `info`, `warn`, `error` (shown as colored chip) |
+| `message` | Main log message text |
+| `demon__highlight` | `true` for highlighting, or a string for inline commentary |
+
+Lines that aren't valid JSON are displayed as raw text.

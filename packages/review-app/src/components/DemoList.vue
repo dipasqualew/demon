@@ -23,6 +23,7 @@ const emit = defineEmits<{
         rounded
         class="mb-1"
         :data-index="index"
+        data-testid="demo-item"
         @click="emit('select', index)"
       >
         {{ demo.file }}

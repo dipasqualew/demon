@@ -3,10 +3,11 @@ import { ref, computed, watch } from "vue";
 import { useReviewData } from "../composables/useReviewData";
 import { useVideoPlayer } from "../composables/useVideoPlayer";
 import VideoPlayer from "./VideoPlayer.vue";
+import LogViewer from "./LogViewer.vue";
 import DemoList from "./DemoList.vue";
 import StepsList from "./StepsList.vue";
 
-const { demos, videos } = useReviewData();
+const { demos, videos, logs } = useReviewData();
 
 const activeIndex = ref(0);
 const currentDemo = computed(() => demos.value[activeIndex.value]);
@@ -20,6 +21,14 @@ const { currentStepIndex, currentTime, isPlaying, seekTo } = useVideoPlayer(
 const hoveredStepIndex = ref(-1);
 const savedPosition = ref(0);
 const wasPlaying = ref(false);
+
+const isLogBased = computed(() => currentDemo.value?.type === "log-based");
+
+const logContent = computed(() => {
+  const demo = currentDemo.value;
+  if (!demo || !isLogBased.value) return "";
+  return logs.value[demo.file] ?? "";
+});
 
 const videoSrc = computed(() => {
   const demo = currentDemo.value;
@@ -69,8 +78,12 @@ watch(currentDemo, () => {
   <div class="demos-tab" id="tab-demos" data-testid="demos-tab">
     <div class="review-layout">
       <div class="video-panel">
+        <LogViewer
+          v-if="currentDemo && isLogBased"
+          :content="logContent"
+        />
         <VideoPlayer
-          v-if="currentDemo"
+          v-else-if="currentDemo"
           :src="videoSrc"
           :demo="currentDemo"
         />
@@ -91,7 +104,7 @@ watch(currentDemo, () => {
           </p>
         </div>
 
-        <div class="mt-4" v-if="currentDemo">
+        <div class="mt-4" v-if="currentDemo && !isLogBased">
           <StepsList
             :steps="currentDemo.steps"
             :active-step-index="currentStepIndex"

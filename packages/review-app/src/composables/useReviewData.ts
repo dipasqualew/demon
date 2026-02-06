@@ -35,6 +35,7 @@ export function useReviewData() {
   const metadata = computed(() => reviewData.metadata);
   const title = computed(() => reviewData.title);
   const videos = computed(() => reviewData.videos);
+  const logs = computed(() => reviewData.logs ?? {});
   const hasReview = computed(() => !!reviewData.metadata.review);
   const review = computed(() => reviewData.metadata.review);
   const demos = computed(() => reviewData.metadata.demos);
@@ -44,6 +45,7 @@ export function useReviewData() {
     metadata,
     title,
     videos,
+    logs,
     hasReview,
     review,
     demos,
