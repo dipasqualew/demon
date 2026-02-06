@@ -4,7 +4,11 @@ description: Record video demos of features using a manifest-driven subagent
 disable-model-invocation: true
 allowed-tools: Bash(git branch *), Bash(mkdir *), Bash(bunx demon-demo-review *), Write, Glob, Read, Task
 interpolations:
+  - "! git rev-parse --show-toplevel"
   - "! git branch --show-current 2>/dev/null | tr '/' '-' || echo 'unknown'"
+  - "! echo \"$(git rev-parse --show-toplevel)/.demoon/reviews/$(git branch --show-current 2>/dev/null | tr '/' '-' || echo 'unknown')\""
+  - "! echo \"$(git rev-parse --show-toplevel)/.demoon/reviews/$(git branch --show-current 2>/dev/null | tr '/' '-' || echo 'unknown')/assets\""
+  - "! echo \"$(git rev-parse --show-toplevel)/.demoon/reviews/$(git branch --show-current 2>/dev/null | tr '/' '-' || echo 'unknown')/tests\""
 ---
 
 # /demo — Record video demos with manifest-driven subagent
@@ -13,14 +17,21 @@ You are tasked with creating demos that showcase the feature the user just built
 
 ## Phase 1: Planning (You do this)
 
-### 1.1 Get branch name
+### 1.1 Pre-computed paths
 
-The current branch name (with slashes replaced by dashes) is available from the interpolation output above. Use this as `${branch-name}` in paths below.
+The following paths are pre-computed from the interpolations above (in order):
+1. **REPO_ROOT**: The git repository root
+2. **BRANCH_NAME**: Current branch name (slashes replaced with dashes)
+3. **REVIEW_FOLDER**: `$REPO_ROOT/.demoon/reviews/$BRANCH_NAME`
+4. **ASSETS_FOLDER**: `$REVIEW_FOLDER/assets` — where to put all outputs (videos, logs)
+5. **TESTS_FOLDER**: `$REVIEW_FOLDER/tests` — where to put all demo test files
 
-### 1.2 Create .demon directory
+These folders are expected to exist. Create them if needed.
+
+### 1.2 Create review directory structure
 
 ```bash
-mkdir -p .demon
+mkdir -p <REVIEW_FOLDER>/assets <REVIEW_FOLDER>/tests
 ```
 
 ### 1.3 Analyze context and create manifest
@@ -30,7 +41,7 @@ Review the conversation context to understand what feature was built. Identify:
 - Which demos are needed (one demo per distinct capability)
 - For each demo, whether it's `web-ux` (browser-based) or `log-based` (backend/CLI output)
 
-Write the manifest to `.demon/${branch-name}-demo-manifest.md`:
+Write the manifest to `<REVIEW_FOLDER>/demo-manifest.md`:
 
 ```markdown
 # Demo Manifest: ${branch-name}
@@ -51,7 +62,9 @@ Brief description of the feature being demonstrated.
 ...
 
 ## Configuration
-- **Output Directory:** /tmp/demon-demos
+- **Review Folder:** <REVIEW_FOLDER>
+- **Assets Directory:** <ASSETS_FOLDER>
+- **Tests Directory:** <TESTS_FOLDER>
 - **Base URL:** http://localhost:3000
 - **Playwright Config:** path/to/playwright.demo.config.ts (use Glob to find it)
 ```
@@ -77,6 +90,12 @@ Use exactly this prompt, replacing `${manifest-path}` with the actual path:
 ---
 
 You are implementing video demos based on a manifest. Read the manifest at `${manifest-path}` to understand what demos to create.
+
+## Directory Structure
+
+The manifest specifies these directories:
+- **Tests Directory**: Where you create demo test files (`.demo.ts`)
+- **Assets Directory**: Where outputs are saved (videos, logs)
 
 ## Setup
 
@@ -125,8 +144,10 @@ test("feature demo", async ({ page }, testInfo) => {
 
 ### Running web-ux Demos
 
+Create your `.demo.ts` files in the **Tests Directory** from the manifest. Run them with:
+
 ```bash
-bunx playwright test --config <config-path> <demo-file>
+bunx playwright test --config <config-path> --output <assets-directory> <demo-file>
 ```
 
 ## For log-based Demos
@@ -164,13 +185,13 @@ Use `demon__highlight` annotations to emphasize key lines:
 
 ### Placement
 
-Place `.jsonl` files in the same output directory specified in the manifest Configuration section.
+Place `.jsonl` files in the **Assets Directory** specified in the manifest Configuration section.
 
 ## After Implementation
 
 Report back with:
-1. List of demo files created (paths)
-2. List of artifact files generated (.webm for web-ux, .jsonl for log-based)
+1. List of demo test files created in the Tests Directory (paths to `.demo.ts` files)
+2. List of artifact files generated in the Assets Directory (.webm for web-ux, .jsonl for log-based)
 3. Any errors encountered
 
 ---
@@ -181,10 +202,10 @@ After the subagent completes:
 
 ### 3.1 Generate review page
 
-Run `demon-demo-review` against the output directory from the manifest:
+Run `demon-demo-review` against the review folder (which contains both `assets` and `tests`):
 
 ```bash
-bunx demon-demo-review <outputDir>
+bunx demon-demo-review <REVIEW_FOLDER>
 ```
 
 ### 3.2 Report to user
