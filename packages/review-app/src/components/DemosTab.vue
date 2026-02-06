@@ -12,7 +12,14 @@ const activeIndex = ref(0);
 const currentDemo = computed(() => demos.value[activeIndex.value]);
 
 const videoRef = ref<HTMLVideoElement | null>(null);
-const { currentStepIndex, seekTo } = useVideoPlayer(videoRef, currentDemo);
+const { currentStepIndex, currentTime, isPlaying, seekTo } = useVideoPlayer(
+  videoRef,
+  currentDemo
+);
+
+const hoveredStepIndex = ref(-1);
+const savedPosition = ref(0);
+const wasPlaying = ref(false);
 
 const videoSrc = computed(() => {
   const demo = currentDemo.value;
@@ -33,6 +40,22 @@ function selectDemo(index: number) {
 function handleSeek(timestampSeconds: number) {
   seekTo(timestampSeconds);
   videoRef.value?.play();
+}
+
+function handleHoverEnter(timestampSeconds: number, index: number) {
+  savedPosition.value = currentTime.value;
+  wasPlaying.value = isPlaying.value;
+  videoRef.value?.pause();
+  seekTo(timestampSeconds + 0.5);
+  hoveredStepIndex.value = index;
+}
+
+function handleHoverLeave() {
+  seekTo(savedPosition.value);
+  if (wasPlaying.value) {
+    videoRef.value?.play();
+  }
+  hoveredStepIndex.value = -1;
 }
 
 watch(currentDemo, () => {
@@ -72,7 +95,10 @@ watch(currentDemo, () => {
           <StepsList
             :steps="currentDemo.steps"
             :active-step-index="currentStepIndex"
+            :hovered-step-index="hoveredStepIndex"
             @seek="handleSeek"
+            @hover-enter="handleHoverEnter"
+            @hover-leave="handleHoverLeave"
           />
         </div>
       </div>
