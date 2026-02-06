@@ -1,100 +1,159 @@
 ---
 name: demo
-description: Record a video demo of the feature you just built using Playwright
+description: Record video demos of features using a manifest-driven subagent
 disable-model-invocation: true
-allowed-tools: Bash(bunx playwright *), Bash(bunx demon-demo-review *), Bash(bunx demon-demo-init *), Write, Glob, Read, Grep
+allowed-tools: Bash(git branch *), Bash(mkdir *), Bash(bunx demon-demo-review *), Write, Glob, Read, Task
 interpolations:
-  - "! bunx demon-demo-init 2>/dev/null || true"
+  - "! git branch --show-current 2>/dev/null | tr '/' '-' || echo 'unknown'"
 ---
 
-# /demo — Record a video demo
+# /demo — Record video demos with manifest-driven subagent
 
-You are tasked with creating and running a Playwright demo that records a video of the feature the user just built.
+You are tasked with creating demos that showcase the feature the user just built. This skill uses a three-phase architecture to optimize token usage.
 
-## Guiding principles
+## Phase 1: Planning (You do this)
+
+### 1.1 Get branch name
+
+The current branch name (with slashes replaced by dashes) is available from the interpolation output above. Use this as `${branch-name}` in paths below.
+
+### 1.2 Create .demon directory
+
+```bash
+mkdir -p .demon
+```
+
+### 1.3 Analyze context and create manifest
+
+Review the conversation context to understand what feature was built. Identify:
+- All acceptance criteria and new capabilities
+- Which demos are needed (one demo per distinct capability)
+- For each demo, whether it's `web-ux` (browser-based) or `log-based` (backend/CLI output)
+
+Write the manifest to `.demon/${branch-name}-demo-manifest.md`:
+
+```markdown
+# Demo Manifest: ${branch-name}
+
+## Context
+Brief description of the feature being demonstrated.
+
+## Demos
+
+### Demo 1: ${kebab-case-name}
+- **Type:** web-ux | log-based
+- **Description:** What this demo should show
+- **Acceptance Criteria:**
+  - Criterion 1
+  - Criterion 2
+
+### Demo 2: ${kebab-case-name}
+...
+
+## Configuration
+- **Output Directory:** /tmp/demon-demos
+- **Base URL:** http://localhost:3000
+- **Playwright Config:** path/to/playwright.demo.config.ts (use Glob to find it)
+```
+
+Use `Glob` to find `playwright.demo.config.ts` and include its path in the Configuration section.
+
+## Phase 2: Implementation (Subagent does this)
+
+Use the `Task` tool to spawn a subagent that implements and runs the demos:
+
+```
+Task(
+  subagent_type: "general-purpose",
+  description: "Implement and run demos from manifest",
+  prompt: <see below>
+)
+```
+
+### Subagent Prompt
+
+Use exactly this prompt, replacing `${manifest-path}` with the actual path:
+
+---
+
+You are implementing video demos based on a manifest. Read the manifest at `${manifest-path}` to understand what demos to create.
+
+## Setup
+
+First, run `bunx demon-demo-init` to create `example.demo.ts`, then read it to understand the project structure.
+
+## Guiding Principles
 
 * **Human-reviewable pacing.** The demo will be watched by a human. Proceed at a natural speed — use generous `waitForTimeout` pauses (800–1500ms) between actions so the reviewer has time to observe each state change before the next action occurs. Never rush through interactions.
-* **Showcase every acceptance criterion.** Before writing the demo, review the issue or conversation context to identify all acceptance criteria and new capabilities. The demo must exercise each one. If an acceptance criterion is not demonstrated, the demo is incomplete.
+* **Showcase every acceptance criterion.** The demo must exercise each acceptance criterion listed in the manifest. If an acceptance criterion is not demonstrated, the demo is incomplete.
 * **Persuade the reviewer.** A `/demo-reviewer` skill will later evaluate this recording to determine whether the work is fully complete and meets expectations. Structure the demo so that every claimed capability is visibly proven — don't just navigate past a feature, interact with it and show the result.
 
-## Steps
+## For web-ux Demos
 
-### 1. Locate the example demo
+### DemoRecorder API
 
-If `demon-demo-init` ran successfully (see the interpolation output above), it created `example.demo.ts` in the demos directory.
+```typescript
+import { test } from "@playwright/test";
+import { DemoRecorder } from "@demon-utils/playwright";
 
-Use `Glob` to find `example.demo.ts`. This file shows the DemoRecorder API and marks where demos should be created.
+test("feature demo", async ({ page }, testInfo) => {
+  const demo = new DemoRecorder({ testStep: test.step });
 
-If no `example.demo.ts` is found, look for `playwright.demo.config.ts`. If that's also missing, tell the user they need to create a demo config and stop.
+  // Each step shows a tooltip at the selector location
+  await demo.step(page, "Navigate to the application", { selector: "body" });
+  await page.goto("/");
+  await page.waitForTimeout(1000);
 
-### 2. Understand what was built
+  // The selector is a CSS selector for positioning tooltips
+  // Use broad selectors like "body", "nav", "form", "#main-content"
+  await demo.step(page, "Click the submit button", { selector: "form" });
+  await page.click("#submit");
+  await page.waitForTimeout(1000);
 
-Read the conversation context to understand what feature was built during this session. Identify a short, descriptive kebab-case name for the feature (e.g. `user-login`, `dashboard-filters`).
+  // Save demo metadata at the end
+  await demo.save(testInfo.outputDir);
+});
+```
 
-### 3. Write the demo file
+### Key Points
 
-Read `example.demo.ts` to understand the DemoRecorder API. Then write a `<feature-name>.demo.ts` file in the same directory.
-
-Key points:
 - Use `demo.step(page, "description", { selector })` for each meaningful action
-- The `selector` is a **CSS selector** for positioning tooltips — use broad selectors like `"body"`, `"nav"`, `"form"`
+- The `selector` is a **CSS selector** for positioning tooltips — use broad selectors
 - Add generous `page.waitForTimeout()` pauses (800–1500ms) between actions
 - Call `demo.save(testInfo.outputDir)` at the end
 - Keep it focused — under 30 seconds of runtime
 
-### 4. Run the demo
+### Running web-ux Demos
 
 ```bash
 bunx playwright test --config <config-path> <demo-file>
 ```
 
-### 5. Report the result
+## For log-based Demos
 
-After the test completes, find the `.webm` video file in the `outputDir` specified in the config (default `/tmp/demon-demos/`) and report its path to the user.
+For backend-heavy features with no visible UI, create log-based demos that display command output as highlighted logs with inline commentary.
 
-If the test failed, show the error output and offer to fix the demo file.
+### JSONL Format
 
-### 6. Generate review page
-
-Run `demon-demo-review` against the `outputDir` from the Playwright config (identified in Step 1). The tool automatically searches subdirectories for `.webm` and `.jsonl` files (Playwright creates per-test subdirectories under `outputDir`).
-
-```bash
-bunx demon-demo-review <outputDir>
-```
-
-If the command succeeds, present the path to the generated `review.html` to the user.
-
-If it fails (e.g. the `claude` CLI is not available), report the error but still show the raw `.webm` video paths from Step 6 as a fallback.
-
-## Log-Based Demos
-
-For backend-heavy features with no visible UI, you can create **log-based demos** instead of video recordings. These display command output as highlighted logs with inline commentary.
-
-### Creating a Log-Based Demo
-
-1. **Capture output to a `.jsonl` file** — each line must be valid JSON:
+Create a `.jsonl` file where each line is valid JSON:
 
 ```jsonl
 {"timestamp":"2024-01-15T10:30:00.123Z","level":"info","message":"Starting migration..."}
 {"timestamp":"2024-01-15T10:30:01.001Z","level":"info","message":"Applied migration 001"}
 ```
 
-2. **Add `demon__highlight` annotations** to emphasize key lines:
+### Adding Highlights
+
+Use `demon__highlight` annotations to emphasize key lines:
 
 - `"demon__highlight": true` — highlights the line with a yellow accent
-- `"demon__highlight": "Your commentary here"` — highlights the line AND shows inline commentary explaining its significance
+- `"demon__highlight": "Your commentary here"` — highlights AND shows inline commentary
 
 ```jsonl
 {"timestamp":"...","level":"info","message":"Migration complete","demon__highlight":"Database schema updated successfully"}
 ```
 
-3. **Place the `.jsonl` file** in the same `outputDir` used for Playwright demos.
-
-4. **Run `demon-demo-review`** as usual — it will discover `.jsonl` files alongside `.webm` files and include them in the review page.
-
-### JSONL Format
-
-Each line should be a JSON object. The log viewer recognizes these optional fields:
+### Field Reference
 
 | Field | Description |
 |-------|-------------|
@@ -103,4 +162,33 @@ Each line should be a JSON object. The log viewer recognizes these optional fiel
 | `message` | Main log message text |
 | `demon__highlight` | `true` for highlighting, or a string for inline commentary |
 
-Lines that aren't valid JSON are displayed as raw text.
+### Placement
+
+Place `.jsonl` files in the same output directory specified in the manifest Configuration section.
+
+## After Implementation
+
+Report back with:
+1. List of demo files created (paths)
+2. List of artifact files generated (.webm for web-ux, .jsonl for log-based)
+3. Any errors encountered
+
+---
+
+## Phase 3: Finalization (You do this)
+
+After the subagent completes:
+
+### 3.1 Generate review page
+
+Run `demon-demo-review` against the output directory from the manifest:
+
+```bash
+bunx demon-demo-review <outputDir>
+```
+
+### 3.2 Report to user
+
+If successful, present the path to the generated `review.html` to the user.
+
+If it fails, report the error but still show the raw artifact paths (.webm/.jsonl) as a fallback.
