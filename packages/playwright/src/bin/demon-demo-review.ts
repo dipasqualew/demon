@@ -1,15 +1,61 @@
 #!/usr/bin/env bun
 import { existsSync, statSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve, join, basename, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   buildReviewPrompt,
   invokeClaude,
   parseLlmResponse,
 } from "../review.ts";
-import { generateReviewHtml } from "../html-generator.ts";
 import { getRepoContext } from "../git-context.ts";
 import type { ReviewMetadata } from "../review-types.ts";
+
+interface ReviewAppData {
+  metadata: ReviewMetadata;
+  title: string;
+  videos: Record<string, string>;
+}
+
+function videoToDataUri(filePath: string): string {
+  const buffer = readFileSync(filePath);
+  const base64 = buffer.toString("base64");
+  return `data:video/webm;base64,${base64}`;
+}
+
+function getReviewTemplate(): string {
+  const currentFile = fileURLToPath(import.meta.url);
+  const binDir = dirname(currentFile);
+  const distDir = dirname(binDir);
+  const templatePath = join(distDir, "review-template.html");
+
+  if (!existsSync(templatePath)) {
+    throw new Error(
+      `Review template not found at ${templatePath}. ` +
+        `Make sure to build the review-app package first.`
+    );
+  }
+
+  return readFileSync(templatePath, "utf-8");
+}
+
+function generateReviewHtml(appData: ReviewAppData): string {
+  const template = getReviewTemplate();
+  const jsonData = JSON.stringify(appData);
+
+  return template
+    .replace("<title>Demo Review</title>", `<title>${escapeHtml(appData.title)}</title>`)
+    .replace('"{{__INJECT_REVIEW_DATA__}}"', jsonData);
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 let dir: string | undefined;
 let agent: string | undefined;
@@ -125,7 +171,22 @@ try {
   writeFileSync(outputPath, JSON.stringify(metadata, null, 2) + "\n");
   console.log(`Review metadata written to ${outputPath}`);
 
-  const html = generateReviewHtml({ metadata });
+  // Build videos map with base64-encoded data URIs
+  const videos: Record<string, string> = {};
+  for (const webmFile of webmFiles) {
+    const filename = basename(webmFile);
+    console.log(`Encoding ${filename}...`);
+    videos[filename] = videoToDataUri(webmFile);
+  }
+
+  // Build app data and generate HTML
+  const appData: ReviewAppData = {
+    metadata,
+    title: "Demo Review",
+    videos,
+  };
+
+  const html = generateReviewHtml(appData);
   const htmlPath = join(resolved, "review.html");
   writeFileSync(htmlPath, html);
   console.log(resolve(htmlPath));

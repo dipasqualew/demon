@@ -2,6 +2,9 @@
   "name": "@demon-utils/playwright",
   "version": "0.1.6",
   "private": false,
+  "scripts": {
+    "build": "./build.sh"
+  },
   "module": "dist/index.js",
   "types": "src/index.ts",
   "exports": {

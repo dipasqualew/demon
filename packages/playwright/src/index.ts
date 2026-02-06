@@ -8,8 +8,5 @@ export type { InvokeClaudeOptions, SpawnFn, LlmReviewResponse, BuildReviewPrompt
 export { getRepoContext } from "./git-context.ts";
 export type { ExecFn, ReadFileFn, RepoContext, GetRepoContextOptions } from "./git-context.ts";
 
-export { generateReviewHtml } from "./html-generator.ts";
-export type { GenerateReviewHtmlOptions } from "./html-generator.ts";
-
 export { DemoRecorder } from "./recorder.ts";
 export type { DemoStep } from "./recorder.ts";

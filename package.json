@@ -1,5 +1,8 @@
 {
   "name": "demon",
   "private": true,
-  "workspaces": ["packages/*"]
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "build": "npm run build -w packages/review-app && npm run build -w packages/playwright"
+  }
 }
