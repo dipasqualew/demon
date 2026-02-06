@@ -39,6 +39,7 @@ export function useReviewData() {
   const hasReview = computed(() => !!reviewData.metadata.review);
   const review = computed(() => reviewData.metadata.review);
   const demos = computed(() => reviewData.metadata.demos);
+  const feedbackEndpoint = computed(() => reviewData.feedbackEndpoint);
 
   return {
     data,
@@ -49,5 +50,6 @@ export function useReviewData() {
     hasReview,
     review,
     demos,
+    feedbackEndpoint,
   };
 }

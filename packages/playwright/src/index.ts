@@ -10,3 +10,6 @@ export type { ExecFn, ReadFileFn, RepoContext, GetRepoContextOptions } from "./g
 
 export { DemoRecorder } from "./recorder.ts";
 export type { DemoStep } from "./recorder.ts";
+
+export { generateReview, discoverDemoFiles, generateReviewHtml, getReviewTemplate, videoToDataUri } from "./review-generator.ts";
+export type { GenerateReviewOptions, GenerateReviewResult, ReviewAppData, DemoFile } from "./review-generator.ts";

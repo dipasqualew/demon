@@ -3,6 +3,6 @@
   "private": true,
   "workspaces": ["packages/*"],
   "scripts": {
-    "build": "npm run build -w packages/review-app && npm run build -w packages/playwright"
+    "build": "npm run build -w packages/review-app && npm run build -w packages/playwright && npm run build -w packages/mcp-server"
   }
 }

@@ -10,9 +10,9 @@ echo "Building review-app..."
 rm -rf dist
 
 # Build playwright library and binaries
-bun build src/index.ts --outdir dist --format esm --sourcemap=external
-bun build src/bin/demon-demo-review.ts --outdir dist/bin --format esm --sourcemap=external
-bun build src/bin/demon-demo-init.ts --outdir dist/bin --format esm --sourcemap=external
+bun build src/index.ts src/review-generator.ts --outdir dist --format esm --sourcemap=external --target=node
+bun build src/bin/demon-demo-review.ts --outdir dist/bin --format esm --sourcemap=external --target=node
+bun build src/bin/demon-demo-init.ts --outdir dist/bin --format esm --sourcemap=external --target=node
 
 # Copy review template
 echo "Copying review template..."

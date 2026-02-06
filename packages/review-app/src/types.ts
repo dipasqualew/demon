@@ -48,4 +48,5 @@ export interface ReviewAppData {
   title: string;
   videos: Record<string, string>;
   logs?: Record<string, string>;
+  feedbackEndpoint?: string;
 }
