@@ -3,7 +3,8 @@
   "version": "0.1.6",
   "private": false,
   "scripts": {
-    "build": "./build.sh"
+    "build": "./build.sh",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts"
   },
   "module": "dist/index.js",
   "types": "src/index.ts",
