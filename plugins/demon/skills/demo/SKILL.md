@@ -2,7 +2,9 @@
 name: demo
 description: Record a video demo of the feature you just built using Playwright
 disable-model-invocation: true
-allowed-tools: Bash(bunx playwright *), Bash(bunx demon-demo-review *), Write, Glob, Read, Grep
+allowed-tools: Bash(bunx playwright *), Bash(bunx demon-demo-review *), Bash(bunx demon-demo-init *), Write, Glob, Read, Grep
+interpolations:
+  - "! bunx demon-demo-init 2>/dev/null || true"
 ---
 
 # /demo — Record a video demo
@@ -17,84 +19,42 @@ You are tasked with creating and running a Playwright demo that records a video 
 
 ## Steps
 
-### 1. Find the demo config
+### 1. Locate the example demo
 
-Use `Glob` to find a file named `playwright.demo.config.ts` in the project.
+If `demon-demo-init` ran successfully (see the interpolation output above), it created `example.demo.ts` in the demos directory.
 
-If no config is found, tell the user they need to create one. Show them this example:
+Use `Glob` to find `example.demo.ts`. This file shows the DemoRecorder API and marks where demos should be created.
 
-```typescript
-import { defineConfig } from "@playwright/test";
+If no `example.demo.ts` is found, look for `playwright.demo.config.ts`. If that's also missing, tell the user they need to create a demo config and stop.
 
-export default defineConfig({
-  outputDir: "/tmp/demon-demos",
-  use: {
-    baseURL: "http://localhost:3000",
-    video: "on",
-    viewport: { width: 1280, height: 720 },
-  },
-  reporter: [["list"]],
-  projects: [{ name: "demo", use: { browserName: "chromium" } }],
-});
-```
-
-Then stop.
-
-### 2. Locate the demos directory
-
-The demos directory is the directory containing the `playwright.demo.config.ts` file. For example, if the config is at `apps/web/playwright.demo.config.ts`, demos go in `apps/web/`.
-
-### 3. Understand what was built
+### 2. Understand what was built
 
 Read the conversation context to understand what feature was built during this session. Identify a short, descriptive kebab-case name for the feature (e.g. `user-login`, `dashboard-filters`).
 
-### 4. Write the demo file
+### 3. Write the demo file
 
-Write a single `<feature-name>.demo.ts` file in the same directory as the config. The file should:
+Read `example.demo.ts` to understand the DemoRecorder API. Then write a `<feature-name>.demo.ts` file in the same directory.
 
-- Import `{ test }` from `@playwright/test` (only add `expect` if you actually assert something)
-- Import `{ DemoRecorder }` from `@demon-utils/playwright`
-- Create a `DemoRecorder` instance with `{ testStep: test.step }`
-- Use `demo.step(page, "description", { selector })` for each meaningful action to record timestamped steps
-- Call `demo.save(testInfo.outputDir)` at the end to write `demo-steps.json` (it auto-creates the directory)
-- Use realistic user interactions (click, fill, navigate)
-- Add generous `page.waitForTimeout()` pauses (800–1500ms) between actions so a human reviewer can follow along
+Key points:
+- Use `demo.step(page, "description", { selector })` for each meaningful action
+- The `selector` is a **CSS selector** for positioning tooltips — use broad selectors like `"body"`, `"nav"`, `"form"`
+- Add generous `page.waitForTimeout()` pauses (800–1500ms) between actions
+- Call `demo.save(testInfo.outputDir)` at the end
 - Keep it focused — under 30 seconds of runtime
 
-**About the `selector` parameter in `demo.step()`:** This is a **CSS selector** passed to `document.querySelector()` — it is NOT a Playwright locator. It is used solely to position a tooltip near the element being demonstrated. Use broad, reliably-present CSS selectors like `"body"`, `"nav"`, `".main-content"`, `"form"`, `"[role=\"list\"]"`. Avoid selectors that target dynamically-rendered inner elements (e.g. `[aria-label="..."]` inside component libraries like Vuetify/MUI) — these often don't exist as top-level attributes in the DOM. When in doubt, use a parent container selector.
-
-Example structure:
-```typescript
-import { test } from "@playwright/test";
-import { DemoRecorder } from "@demon-utils/playwright";
-
-test("feature demo", async ({ page }, testInfo) => {
-  const demo = new DemoRecorder({ testStep: test.step });
-
-  await demo.step(page, "Navigate to page", { selector: "body" });
-  await page.goto("/feature");
-  await page.waitForTimeout(1000);
-
-  await demo.step(page, "Click the button", { selector: "form" });
-  await page.click("#btn");
-
-  await demo.save(testInfo.outputDir);
-});
-```
-
-### 5. Run the demo
+### 4. Run the demo
 
 ```bash
 bunx playwright test --config <config-path> <demo-file>
 ```
 
-### 6. Report the result
+### 5. Report the result
 
 After the test completes, find the `.webm` video file in the `outputDir` specified in the config (default `/tmp/demon-demos/`) and report its path to the user.
 
 If the test failed, show the error output and offer to fix the demo file.
 
-### 7. Generate review page
+### 6. Generate review page
 
 Run `demon-demo-review` against the `outputDir` from the Playwright config (identified in Step 1). The tool automatically searches subdirectories for `.webm` files (Playwright creates per-test subdirectories under `outputDir`).
 

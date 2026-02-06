@@ -15,7 +15,8 @@
     "src"
   ],
   "bin": {
-    "demon-demo-review": "dist/bin/demon-demo-review.js"
+    "demon-demo-review": "dist/bin/demon-demo-review.js",
+    "demon-demo-init": "dist/bin/demon-demo-init.js"
   },
   "type": "module",
   "peerDependencies": {
