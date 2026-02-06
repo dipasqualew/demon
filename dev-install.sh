@@ -56,7 +56,7 @@ echo ""
 
 # Step 4: Link package in target repo
 echo "Linking @demon-utils/playwright in target repo..."
-(cd "${TARGET_PATH}/e2e" && bun link @demon-utils/playwright)
+(cd "${TARGET_PATH}/.demoon" && bun link @demon-utils/playwright)
 echo ""
 
 echo "Done! @demon-utils/playwright is now linked from local source."
