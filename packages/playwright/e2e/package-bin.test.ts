@@ -108,3 +108,121 @@ describe("demon-demo-review package binary", () => {
     expect(html).toContain("signup.webm");
   });
 });
+
+describe("demon-demo-init package binary", () => {
+  let tarball: string;
+  let workDir: string;
+  const workDirs: string[] = [];
+
+  beforeAll(() => {
+    // 1. Build the package
+    const build = spawnSync("bash", ["build.sh"], { cwd: PKG_DIR });
+    if (build.status !== 0) {
+      throw new Error(`build.sh failed: ${build.stderr?.toString()}`);
+    }
+
+    // 2. Pack the tarball
+    const pack = spawnSync("npm", ["pack", "--pack-destination", "/tmp"], {
+      cwd: PKG_DIR,
+    });
+    if (pack.status !== 0) {
+      throw new Error(`npm pack failed: ${pack.stderr?.toString()}`);
+    }
+    tarball = join("/tmp", pack.stdout.toString().trim());
+
+    // 3. Create work directory and install once
+    workDir = join("/tmp", "demon", "tests", `demo-init-${randomUUID()}`);
+    mkdirSync(workDir, { recursive: true });
+    writeFileSync(
+      join(workDir, "package.json"),
+      JSON.stringify({ name: "test-consumer", version: "0.0.0", private: true }),
+    );
+
+    const install = spawnSync("npm", ["install", tarball], {
+      cwd: workDir,
+      timeout: 30_000,
+    });
+    if (install.status !== 0) {
+      throw new Error(`npm install failed: ${install.stderr?.toString()}`);
+    }
+  });
+
+  afterAll(() => {
+    rmSync(workDir, { recursive: true, force: true });
+    rmSync(tarball, { force: true });
+    for (const dir of workDirs) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  function createTempDir(): string {
+    const dir = join("/tmp", "demon", "tests", `demo-init-case-${randomUUID()}`);
+    mkdirSync(dir, { recursive: true });
+    workDirs.push(dir);
+    return dir;
+  }
+
+  function runDemoInit(args: string[] = []): { status: number | null; stdout: string; stderr: string } {
+    const bin = join(workDir, "node_modules", ".bin", "demon-demo-init");
+    const result = spawnSync(bin, args, { timeout: 10_000 });
+    return {
+      status: result.status,
+      stdout: result.stdout?.toString() ?? "",
+      stderr: result.stderr?.toString() ?? "",
+    };
+  }
+
+  test("creates example.demo.ts when config exists", () => {
+    const testDir = createTempDir();
+    writeFileSync(join(testDir, "playwright.demo.config.ts"), "export default {}");
+
+    const result = runDemoInit([testDir]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe(join(testDir, "example.demo.ts"));
+
+    const content = readFileSync(join(testDir, "example.demo.ts"), "utf-8");
+    expect(content).toContain('import { test } from "@playwright/test"');
+    expect(content).toContain('import { DemoRecorder } from "@demon-utils/playwright"');
+    expect(content).toContain("demo.step(page,");
+    expect(content).toContain("demo.save(testInfo.outputDir)");
+  });
+
+  test("exits with code 1 when no config found", () => {
+    const testDir = createTempDir();
+    // No config file created
+
+    const result = runDemoInit([testDir]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Could not find playwright.demo.config.ts");
+    expect(result.stderr).toContain(testDir);
+  });
+
+  test("finds config in parent directory", () => {
+    const testDir = createTempDir();
+    const subDir = join(testDir, "apps", "web", "src");
+    mkdirSync(subDir, { recursive: true });
+    writeFileSync(join(testDir, "playwright.demo.config.ts"), "export default {}");
+
+    const result = runDemoInit([subDir]);
+
+    expect(result.status).toBe(0);
+    // example.demo.ts should be created next to config, not in subdir
+    expect(result.stdout.trim()).toBe(join(testDir, "example.demo.ts"));
+    expect(readFileSync(join(testDir, "example.demo.ts"), "utf-8")).toContain("DemoRecorder");
+  });
+
+  test("overwrites existing example.demo.ts", () => {
+    const testDir = createTempDir();
+    writeFileSync(join(testDir, "playwright.demo.config.ts"), "export default {}");
+    writeFileSync(join(testDir, "example.demo.ts"), "// old content");
+
+    const result = runDemoInit([testDir]);
+
+    expect(result.status).toBe(0);
+    const content = readFileSync(join(testDir, "example.demo.ts"), "utf-8");
+    expect(content).not.toContain("old content");
+    expect(content).toContain("DemoRecorder");
+  });
+});
