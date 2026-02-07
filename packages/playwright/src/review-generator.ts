@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, basename, dirname } from "node:path";
+import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -21,6 +21,7 @@ export interface ReviewAppData {
 export interface DemoFile {
   path: string;
   filename: string;
+  relativePath: string;
   type: DemoType;
 }
 
@@ -35,12 +36,6 @@ export interface GenerateReviewResult {
   htmlPath: string;
   metadataPath: string;
   metadata: ReviewMetadata;
-}
-
-export function videoToDataUri(filePath: string): string {
-  const buffer = readFileSync(filePath);
-  const base64 = buffer.toString("base64");
-  return `data:video/webm;base64,${base64}`;
 }
 
 export function getReviewTemplate(): string {
@@ -84,10 +79,11 @@ export function discoverDemoFiles(directory: string): DemoFile[] {
   const files: DemoFile[] = [];
 
   const processFile = (filePath: string, filename: string) => {
+    const relativePath = relative(directory, filePath);
     if (filename.endsWith(".webm")) {
-      files.push({ path: filePath, filename, type: "web-ux" });
+      files.push({ path: filePath, filename, relativePath, type: "web-ux" });
     } else if (filename.endsWith(".jsonl")) {
-      files.push({ path: filePath, filename, type: "log-based" });
+      files.push({ path: filePath, filename, relativePath, type: "log-based" });
     }
   };
 
@@ -118,41 +114,46 @@ export async function generateReview(options: GenerateReviewOptions): Promise<Ge
   const { directory, agent, feedbackEndpoint, title = "Demo Review" } = options;
 
   const demoFiles = discoverDemoFiles(directory);
-  const webmFiles = demoFiles.filter((d) => d.type === "web-ux").map((d) => d.path);
-  const jsonlFiles = demoFiles.filter((d) => d.type === "log-based").map((d) => d.path);
+  const webUxDemos = demoFiles.filter((d) => d.type === "web-ux");
+  const logBasedDemos = demoFiles.filter((d) => d.type === "log-based");
 
   if (demoFiles.length === 0) {
     throw new Error(`No .webm or .jsonl files found in "${directory}" or its subdirectories.`);
   }
 
+  // Build maps from filename to relativePath for lookup
+  const filenameToRelativePath = new Map(demoFiles.map((d) => [d.filename, d.relativePath]));
+
   // Collect demo-steps.json from the directory of each .webm file
-  const stepsMap: Record<string, Array<{ text: string; timestampSeconds: number }>> = {};
-  for (const webmFile of webmFiles) {
-    const stepsPath = join(dirname(webmFile), "demo-steps.json");
+  // Key by filename for prompt builder, and by relativePath for metadata
+  const stepsMapByFilename: Record<string, Array<{ text: string; timestampSeconds: number }>> = {};
+  const stepsMapByRelativePath: Record<string, Array<{ text: string; timestampSeconds: number }>> = {};
+  for (const demo of webUxDemos) {
+    const stepsPath = join(dirname(demo.path), "demo-steps.json");
     if (!existsSync(stepsPath)) continue;
     try {
       const raw = readFileSync(stepsPath, "utf-8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        stepsMap[basename(webmFile)] = parsed;
+        stepsMapByFilename[demo.filename] = parsed;
+        stepsMapByRelativePath[demo.relativePath] = parsed;
       }
     } catch {
       // skip malformed steps files
     }
   }
 
-  // Collect JSONL content for log-based demos
+  // Collect JSONL content for log-based demos, keyed by relativePath
   const logsMap: Record<string, string> = {};
-  for (const jsonlFile of jsonlFiles) {
-    const filename = basename(jsonlFile);
-    logsMap[filename] = readFileSync(jsonlFile, "utf-8");
+  for (const demo of logBasedDemos) {
+    logsMap[demo.relativePath] = readFileSync(demo.path, "utf-8");
   }
 
   // For web-ux demos, require steps
-  const hasWebUxDemos = webmFiles.length > 0;
-  const hasLogDemos = jsonlFiles.length > 0;
+  const hasWebUxDemos = webUxDemos.length > 0;
+  const hasLogDemos = logBasedDemos.length > 0;
 
-  if (hasWebUxDemos && Object.keys(stepsMap).length === 0) {
+  if (hasWebUxDemos && Object.keys(stepsMapByFilename).length === 0) {
     throw new Error(
       "No demo-steps.json found alongside any .webm files. " +
         "Use DemoRecorder in your demo tests to generate step data."
@@ -175,7 +176,7 @@ export async function generateReview(options: GenerateReviewOptions): Promise<Ge
   }
 
   const allFilenames = demoFiles.map((d) => d.filename);
-  const prompt = buildReviewPrompt({ filenames: allFilenames, stepsMap, gitDiff, guidelines });
+  const prompt = buildReviewPrompt({ filenames: allFilenames, stepsMap: stepsMapByFilename, gitDiff, guidelines });
 
   const rawOutput = await invokeClaude(prompt, { agent });
   const llmResponse = parseLlmResponse(rawOutput);
@@ -184,31 +185,29 @@ export async function generateReview(options: GenerateReviewOptions): Promise<Ge
   const typeMap = new Map(demoFiles.map((d) => [d.filename, d.type]));
 
   // Construct final metadata by merging LLM summaries with steps and type
+  // Convert filenames from LLM response to relative paths for proper video loading
   const metadata: ReviewMetadata = {
-    demos: llmResponse.demos.map((demo) => ({
-      file: demo.file,
-      type: typeMap.get(demo.file) ?? "web-ux",
-      summary: demo.summary,
-      steps: stepsMap[demo.file] ?? [],
-    })),
+    demos: llmResponse.demos.map((demo) => {
+      const relativePath = filenameToRelativePath.get(demo.file) ?? demo.file;
+      return {
+        file: relativePath,
+        type: typeMap.get(demo.file) ?? "web-ux",
+        summary: demo.summary,
+        steps: stepsMapByRelativePath[relativePath] ?? [],
+      };
+    }),
     review: llmResponse.review,
   };
 
   const metadataPath = join(directory, "review-metadata.json");
   writeFileSync(metadataPath, JSON.stringify(metadata, null, 2) + "\n");
 
-  // Build videos map with base64-encoded data URIs
-  const videos: Record<string, string> = {};
-  for (const webmFile of webmFiles) {
-    const filename = basename(webmFile);
-    videos[filename] = videoToDataUri(webmFile);
-  }
-
   // Build app data and generate HTML
+  // Videos are referenced by relative path in demo.file, no base64 encoding needed
   const appData: ReviewAppData = {
     metadata,
     title,
-    videos,
+    videos: {},
     logs: Object.keys(logsMap).length > 0 ? logsMap : undefined,
     feedbackEndpoint,
   };
