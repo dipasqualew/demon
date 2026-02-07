@@ -95,32 +95,46 @@ test.describe("demon-demo-init package binary", () => {
 });
 
 test.describe("demoon review package binary", () => {
-  test("generates review from issue file with mock agent", async ({
+  test("generates review files and embeds feedback endpoint", async ({
     installedPackageDir,
     demoonReviewDir,
     demoonMockAgentPath,
     demoonIssueFilePath,
   }) => {
+    // For now, just verify the review generation works without waiting for feedback
+    // The feedback server integration is tested separately in mcp-server tests
     const bin = join(installedPackageDir, "node_modules", ".bin", "demoon");
-    const result = spawnSync(
-      bin,
-      ["review", "--issue-file", demoonIssueFilePath, "--agent", demoonMockAgentPath],
-      {
-        cwd: demoonReviewDir,
-        timeout: 30_000,
-      },
-    );
+    const { spawn } = await import("node:child_process");
 
-    if (result.status !== 0) {
-      const stderr = result.stderr?.toString() ?? "";
-      const stdout = result.stdout?.toString() ?? "";
-      throw new Error(`Binary exited with code ${result.status}:\nstderr: ${stderr}\nstdout: ${stdout}`);
+    const proc = spawn(bin, [
+      "review",
+      "--issue-file", demoonIssueFilePath,
+      "--agent", demoonMockAgentPath,
+      "--port", "0",
+    ], {
+      cwd: demoonReviewDir,
+    });
+
+    let stdout = "";
+    let stderr = "";
+    proc.stdout?.on("data", (data) => { stdout += data.toString(); });
+    proc.stderr?.on("data", (data) => { stderr += data.toString(); });
+
+    // Wait for the review to be generated and server URL to appear
+    let feedbackUrl: string | null = null;
+    for (let i = 0; i < 100; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      const match = stdout.match(/http:\/\/localhost:(\d+)/);
+      if (match) {
+        feedbackUrl = match[0];
+        break;
+      }
     }
 
-    const stdout = result.stdout?.toString() ?? "";
-    expect(stdout).toContain("issue #42");
-    expect(stdout).toContain("Add login functionality");
-    expect(stdout).toContain("approve");
+    if (!feedbackUrl) {
+      proc.kill();
+      throw new Error(`Server URL not found in output:\nstdout: ${stdout}\nstderr: ${stderr}`);
+    }
 
     // Verify review files were created
     const assetsDir = join(demoonReviewDir, ".demoon", "reviews", "feature-login", "assets");
@@ -132,10 +146,15 @@ test.describe("demoon review package binary", () => {
     const expected = JSON.parse(readFileSync(join(DEMOON_FIXTURES_DIR, "expected-metadata.json"), "utf-8"));
     expect(metadata).toEqual(expected);
 
-    // Verify HTML contains expected content
+    // Verify HTML contains expected content and feedback endpoint
     const html = readFileSync(join(assetsDir, "review.html"), "utf-8");
     expect(html.toLowerCase()).toContain("<!doctype html>");
     expect(html).toContain("login-demo.webm");
     expect(html).toContain("api-demo.jsonl");
+    expect(html).toContain("feedbackEndpoint");
+    expect(html).toContain(feedbackUrl);
+
+    // Kill the process since we're not testing the feedback flow here
+    proc.kill();
   });
 });

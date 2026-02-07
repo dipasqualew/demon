@@ -13,3 +13,9 @@ export type { DemoStep } from "./recorder.ts";
 
 export { generateReview, discoverDemoFiles, generateReviewHtml, getReviewTemplate } from "./review-generator.ts";
 export type { GenerateReviewOptions, GenerateReviewResult, ReviewAppData, DemoFile } from "./review-generator.ts";
+
+export { runReviewOrchestration } from "./orchestrator.ts";
+export type { OrchestratorOptions, OrchestratorResult } from "./orchestrator.ts";
+
+export { startFeedbackServer } from "./feedback-server.ts";
+export type { FeedbackPayload, FeedbackServerResult } from "./feedback-server.ts";

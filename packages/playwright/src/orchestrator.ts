@@ -19,6 +19,7 @@ export interface OrchestratorOptions {
   issue?: GitHubIssue;  // Pre-loaded issue (skips GitHub API fetch)
   diffBase?: string;
   agent?: string;
+  feedbackEndpoint?: string;  // URL for feedback submission (enables MCP integration)
   spawn?: SpawnFn;
   exec?: ExecFn;
   cwd?: string;
@@ -323,6 +324,7 @@ export async function runReviewOrchestration(
     title: `Review: Issue #${issue.number} - ${issue.title}`,
     videos: {},
     logs: Object.keys(logsMap).length > 0 ? logsMap : undefined,
+    feedbackEndpoint: options.feedbackEndpoint,
   };
 
   const html = generateReviewHtml(appData);

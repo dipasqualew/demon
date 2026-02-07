@@ -2,6 +2,7 @@
   "demos": [
     {
       "file": "login-flow.webm",
+      "type": "web-ux",
       "summary": "Demonstrates the login flow",
       "steps": [
         {
@@ -20,6 +21,7 @@
     },
     {
       "file": "signup.webm",
+      "type": "web-ux",
       "summary": "Demonstrates the signup process",
       "steps": [
         {
