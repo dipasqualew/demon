@@ -25,7 +25,8 @@
   },
   "type": "module",
   "dependencies": {
-    "@octokit/graphql": "^8.2.1"
+    "@octokit/graphql": "^8.2.1",
+    "winston": "^3.17.0"
   },
   "peerDependencies": {
     "@playwright/test": ">=1.40.0"

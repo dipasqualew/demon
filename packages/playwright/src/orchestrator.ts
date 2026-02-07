@@ -2,6 +2,7 @@ import { mkdirSync, existsSync, writeFileSync, readFileSync } from "node:fs";
 import { join, dirname as pathDirname } from "node:path";
 import { spawnSync } from "node:child_process";
 
+import { getLogger } from "./logger.ts";
 import type { SpawnFn } from "./review.ts";
 import { invokeClaude, parseLlmResponse } from "./review.ts";
 import { getRepoContext, type ExecFn } from "./git-context.ts";
@@ -231,37 +232,52 @@ function collectDemoData(
 export async function runReviewOrchestration(
   options: OrchestratorOptions,
 ): Promise<OrchestratorResult> {
+  const logger = getLogger();
   const exec = options.exec ?? defaultExec;
   const cwd = options.cwd ?? process.cwd();
 
+  logger.debug("Starting review orchestration", { issueId: options.issueId, cwd, diffBase: options.diffBase });
+
   // 1. Fetch GitHub issue (or use pre-loaded issue)
+  logger.debug("Step 1: Fetching GitHub issue", { issueId: options.issueId, hasPreloadedIssue: !!options.issue });
   const issue = options.issue ?? await fetchGitHubIssue(options.issueId, options.github);
+  logger.debug("GitHub issue fetched", { issueNumber: issue.number, issueTitle: issue.title, bodyLength: issue.body?.length ?? 0 });
 
   // 2. Get repo context (git diff + guidelines)
+  logger.debug("Step 2: Getting repo context");
   const gitRoot = await getGitRoot(exec, cwd);
+  logger.debug("Git root found", { gitRoot });
   const branchName = await getCurrentBranch(exec, cwd);
+  logger.debug("Current branch", { branchName });
 
+  logger.debug("Fetching repo context (git diff + guidelines)", { diffBase: options.diffBase });
   const repoContext = await getRepoContext(gitRoot, {
     exec,
     diffBase: options.diffBase,
   });
+  logger.debug("Repo context fetched", { gitDiffLength: repoContext.gitDiff.length, guidelinesCount: repoContext.guidelines.length });
 
   // 3. Create review folder structure
   const reviewFolder = join(gitRoot, ".demoon", "reviews", branchName);
   const assetsFolder = join(reviewFolder, "assets");
   const testsFolder = join(reviewFolder, "tests");
+  logger.debug("Step 3: Setting up review folder structure", { reviewFolder, assetsFolder, testsFolder });
 
   if (!existsSync(reviewFolder)) {
+    logger.debug("Creating review folder", { reviewFolder });
     mkdirSync(reviewFolder, { recursive: true });
   }
   if (!existsSync(assetsFolder)) {
+    logger.debug("Creating assets folder", { assetsFolder });
     mkdirSync(assetsFolder, { recursive: true });
   }
   if (!existsSync(testsFolder)) {
+    logger.debug("Creating tests folder", { testsFolder });
     mkdirSync(testsFolder, { recursive: true });
   }
 
   // 4. Run Presenter phase
+  logger.debug("Step 4: Building presenter prompt");
   const presenterPrompt = buildPresenterPrompt({
     issue,
     gitDiff: repoContext.gitDiff,
@@ -270,22 +286,36 @@ export async function runReviewOrchestration(
     assetsFolder,
     testsFolder,
   });
+  logger.debug("Presenter prompt built", { promptLength: presenterPrompt.length });
 
+  logger.debug("Invoking Claude for presenter phase", { agent: options.agent });
   await invokeClaude(presenterPrompt, { agent: options.agent, spawn: options.spawn });
+  logger.debug("Presenter phase completed");
 
   // 5. Discover generated demos
+  logger.debug("Step 5: Discovering generated demos", { assetsFolder });
   const demoFiles = discoverDemoFiles(assetsFolder);
+  logger.debug("Demo files discovered", { count: demoFiles.length, files: demoFiles.map(f => ({ path: f.relativePath, type: f.type })) });
 
   if (demoFiles.length === 0) {
+    logger.error("No demo files found after presenter phase", { assetsFolder });
     throw new Error(`No demo files (.webm or .jsonl) found in ${assetsFolder} after Presenter phase`);
   }
 
   // 6. Collect demo data (steps, logs)
+  logger.debug("Step 6: Collecting demo data (steps, logs)");
   const { stepsMapByFilename, stepsMapByRelativePath, logsMap } = collectDemoData(
     demoFiles,
   );
+  logger.debug("Demo data collected", {
+    stepsCount: Object.keys(stepsMapByFilename).length,
+    logsCount: Object.keys(logsMap).length,
+    stepsFiles: Object.keys(stepsMapByFilename),
+    logFiles: Object.keys(logsMap),
+  });
 
   // 7. Run Reviewer phase
+  logger.debug("Step 7: Building reviewer prompt");
   const reviewerPrompt = buildReviewerPrompt({
     issue,
     gitDiff: repoContext.gitDiff,
@@ -294,11 +324,23 @@ export async function runReviewOrchestration(
     stepsMap: stepsMapByFilename,
     logsMap,
   });
+  logger.debug("Reviewer prompt built", { promptLength: reviewerPrompt.length });
 
+  logger.debug("Invoking Claude for reviewer phase", { agent: options.agent });
   const rawOutput = await invokeClaude(reviewerPrompt, { agent: options.agent, spawn: options.spawn });
+  logger.debug("Reviewer phase completed", { rawOutputLength: rawOutput.length });
+
+  logger.debug("Parsing LLM response");
   const llmResponse = parseLlmResponse(rawOutput);
+  logger.debug("LLM response parsed", {
+    demosCount: llmResponse.demos.length,
+    verdict: llmResponse.review.verdict,
+    issuesCount: llmResponse.review.issues.length,
+    highlightsCount: llmResponse.review.highlights.length,
+  });
 
   // 8. Build metadata
+  logger.debug("Step 8: Building metadata");
   const filenameToRelativePath = new Map(demoFiles.map((d) => [d.filename, d.relativePath]));
   const typeMap = new Map<string, DemoType>(demoFiles.map((d) => [d.filename, d.type]));
 
@@ -314,10 +356,13 @@ export async function runReviewOrchestration(
     }),
     review: llmResponse.review,
   };
+  logger.debug("Metadata built", { demosCount: metadata.demos.length, hasReview: !!metadata.review });
 
   // 9. Write metadata and HTML
+  logger.debug("Step 9: Writing metadata and HTML");
   const metadataPath = join(assetsFolder, "review-metadata.json");
   writeFileSync(metadataPath, JSON.stringify(metadata, null, 2) + "\n");
+  logger.debug("Metadata written", { metadataPath });
 
   const appData: ReviewAppData = {
     metadata,
@@ -327,10 +372,13 @@ export async function runReviewOrchestration(
     feedbackEndpoint: options.feedbackEndpoint,
   };
 
+  logger.debug("Generating review HTML", { title: appData.title, hasLogs: !!appData.logs, feedbackEndpoint: appData.feedbackEndpoint });
   const html = generateReviewHtml(appData);
   const htmlPath = join(assetsFolder, "review.html");
   writeFileSync(htmlPath, html);
+  logger.debug("HTML written", { htmlPath, htmlLength: html.length });
 
+  logger.debug("Review orchestration completed successfully", { reviewFolder, htmlPath, metadataPath });
   return {
     reviewFolder,
     htmlPath,

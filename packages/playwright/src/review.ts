@@ -1,3 +1,5 @@
+import { getLogger } from "./logger.ts";
+
 export type SpawnFn = (
   cmd: string[],
 ) => { exitCode: Promise<number>; stdout: ReadableStream<Uint8Array> };
@@ -91,29 +93,39 @@ export async function invokeClaude(
   prompt: string,
   options?: InvokeClaudeOptions,
 ): Promise<string> {
+  const logger = getLogger();
   const spawnFn = options?.spawn ?? defaultSpawn;
   const agent = options?.agent ?? "claude";
+
+  logger.debug("Invoking Claude", { agent, promptLength: prompt.length });
   const proc = spawnFn([agent, "-p", prompt]);
 
   const reader = proc.stdout.getReader();
   const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     chunks.push(value);
+    totalBytes += value.length;
+    logger.debug("Received chunk from Claude", { chunkSize: value.length, totalBytes });
   }
 
   const exitCode = await proc.exitCode;
+  logger.debug("Claude process exited", { exitCode, totalBytes });
+
   const output = new TextDecoder().decode(
     concatUint8Arrays(chunks),
   );
 
   if (exitCode !== 0) {
+    logger.error("Claude process failed", { exitCode, output: output.slice(0, 500) });
     throw new Error(
       `claude process exited with code ${exitCode}: ${output.trim()}`,
     );
   }
 
+  logger.debug("Claude invocation successful", { outputLength: output.trim().length });
   return output.trim();
 }
 
@@ -134,102 +146,139 @@ const VALID_VERDICTS: ReadonlySet<string> = new Set(["approve", "request_changes
 const VALID_SEVERITIES: ReadonlySet<string> = new Set(["major", "minor", "nit"]);
 
 export function extractJson(raw: string): string {
+  const logger = getLogger();
+  logger.debug("Extracting JSON from raw output", { rawLength: raw.length });
+
   // Try raw string first
   try {
     JSON.parse(raw);
+    logger.debug("Raw output is valid JSON");
     return raw;
   } catch {
-    // look for first { and last }
+    logger.debug("Raw output is not valid JSON, searching for JSON object");
   }
 
   const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
   if (start === -1 || end === -1 || end <= start) {
+    logger.error("No JSON object found in LLM response", { rawPreview: raw.slice(0, 200), start, end });
     throw new Error(`No JSON object found in LLM response: ${raw.slice(0, 200)}`);
   }
 
+  logger.debug("JSON object found", { start, end, extractedLength: end - start + 1 });
   return raw.slice(start, end + 1);
 }
 
 export function parseLlmResponse(raw: string): LlmReviewResponse {
+  const logger = getLogger();
+  logger.debug("Parsing LLM response", { rawLength: raw.length });
+
   const jsonStr = extractJson(raw);
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(jsonStr);
-  } catch {
+    logger.debug("JSON parsed successfully");
+  } catch (err) {
+    logger.error("Failed to parse JSON from LLM", { jsonPreview: raw.slice(0, 200), error: err instanceof Error ? err.message : String(err) });
     throw new Error(`Invalid JSON from LLM: ${raw.slice(0, 200)}`);
   }
 
   if (typeof parsed !== "object" || parsed === null || !("demos" in parsed)) {
+    logger.error("Missing 'demos' array in review metadata", { parsed });
     throw new Error("Missing 'demos' array in review metadata");
   }
 
   const obj = parsed as Record<string, unknown>;
   if (!Array.isArray(obj["demos"])) {
+    logger.error("'demos' is not an array", { demosType: typeof obj["demos"] });
     throw new Error("'demos' must be an array");
   }
 
+  logger.debug("Validating demos array", { demosCount: (obj["demos"] as unknown[]).length });
   for (const demo of obj["demos"] as unknown[]) {
     if (typeof demo !== "object" || demo === null) {
+      logger.error("Invalid demo object", { demo });
       throw new Error("Each demo must be an object");
     }
     const d = demo as Record<string, unknown>;
 
     if (typeof d["file"] !== "string") {
+      logger.error("Demo missing 'file' string", { demo: d });
       throw new Error("Each demo must have a 'file' string");
     }
     if (typeof d["summary"] !== "string") {
+      logger.error("Demo missing 'summary' string", { demo: d });
       throw new Error("Each demo must have a 'summary' string");
     }
   }
 
   if (typeof obj["review"] !== "object" || obj["review"] === null) {
+    logger.error("Missing 'review' object in response");
     throw new Error("Missing 'review' object in response");
   }
 
   const review = obj["review"] as Record<string, unknown>;
+  logger.debug("Validating review object", { reviewKeys: Object.keys(review) });
 
   if (typeof review["summary"] !== "string") {
+    logger.error("review.summary is not a string", { summaryType: typeof review["summary"] });
     throw new Error("review.summary must be a string");
   }
 
   if (!Array.isArray(review["highlights"])) {
+    logger.error("review.highlights is not an array", { highlightsType: typeof review["highlights"] });
     throw new Error("review.highlights must be an array");
   }
   if (review["highlights"].length === 0) {
+    logger.error("review.highlights is empty");
     throw new Error("review.highlights must not be empty");
   }
   for (const h of review["highlights"]) {
     if (typeof h !== "string") {
+      logger.error("Highlight is not a string", { highlightType: typeof h });
       throw new Error("Each highlight must be a string");
     }
   }
 
   if (typeof review["verdict"] !== "string" || !VALID_VERDICTS.has(review["verdict"])) {
+    logger.error("Invalid review.verdict", { verdict: review["verdict"] });
     throw new Error("review.verdict must be 'approve' or 'request_changes'");
   }
 
   if (typeof review["verdictReason"] !== "string") {
+    logger.error("review.verdictReason is not a string", { verdictReasonType: typeof review["verdictReason"] });
     throw new Error("review.verdictReason must be a string");
   }
 
   if (!Array.isArray(review["issues"])) {
+    logger.error("review.issues is not an array", { issuesType: typeof review["issues"] });
     throw new Error("review.issues must be an array");
   }
 
+  logger.debug("Validating issues array", { issuesCount: (review["issues"] as unknown[]).length });
   for (const issue of review["issues"] as unknown[]) {
     if (typeof issue !== "object" || issue === null) {
+      logger.error("Invalid issue object", { issue });
       throw new Error("Each issue must be an object");
     }
     const i = issue as Record<string, unknown>;
     if (typeof i["severity"] !== "string" || !VALID_SEVERITIES.has(i["severity"])) {
+      logger.error("Invalid issue severity", { severity: i["severity"] });
       throw new Error("Each issue severity must be 'major', 'minor', or 'nit'");
     }
     if (typeof i["description"] !== "string") {
+      logger.error("Issue missing 'description' string", { issue: i });
       throw new Error("Each issue must have a 'description' string");
     }
   }
+
+  logger.debug("LLM response parsed and validated successfully", {
+    demosCount: (obj["demos"] as unknown[]).length,
+    verdict: review["verdict"],
+    highlightsCount: (review["highlights"] as unknown[]).length,
+    issuesCount: (review["issues"] as unknown[]).length,
+  });
 
   return parsed as LlmReviewResponse;
 }

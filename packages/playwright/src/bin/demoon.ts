@@ -2,6 +2,7 @@
 import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
 
+import { createLogger } from "../logger.ts";
 import { runReviewOrchestration } from "../orchestrator.ts";
 import { startFeedbackServer, type FeedbackPayload } from "../feedback-server.ts";
 import type { GitHubIssue } from "../github-issue.ts";
@@ -18,6 +19,7 @@ function printUsage(): void {
   console.error("  --base <ref>            Base commit/branch for diff (auto-detects main/master if on feature branch)");
   console.error("  --agent <path>          Path to Claude agent binary");
   console.error("  --port <number>         Port for feedback server (default: random available port)");
+  console.error("  --debug                 Enable debug logging (JSON format)");
   console.error("");
   console.error("Environment variables:");
   console.error("  GITHUB_TOKEN or GH_TOKEN  GitHub personal access token (required for API access)");
@@ -46,6 +48,7 @@ async function main(): Promise<void> {
   let diffBase: string | undefined;
   let agent: string | undefined;
   let port = 0;
+  let debug = false;
 
   for (let i = 1; i < args.length; i++) {
     const arg = args[i];
@@ -59,6 +62,8 @@ async function main(): Promise<void> {
       agent = args[++i];
     } else if (arg === "--port") {
       port = parseInt(args[++i] ?? "0", 10);
+    } else if (arg === "--debug") {
+      debug = true;
     } else if (!arg?.startsWith("-")) {
       // Allow positional issue ID for convenience
       if (!issueId) {
@@ -67,15 +72,22 @@ async function main(): Promise<void> {
     }
   }
 
+  // Initialize logger
+  const logger = createLogger({ level: debug ? "debug" : "info" });
+  logger.debug("CLI initialized", { args: process.argv.slice(2), debug });
+
   // Load issue from file if provided
   let issue: GitHubIssue | undefined;
   if (issueFile) {
+    logger.debug("Loading issue from file", { issueFile });
     const content = readFileSync(issueFile, "utf-8");
     issue = JSON.parse(content) as GitHubIssue;
     issueId = String(issue.number);
+    logger.debug("Issue loaded from file", { issueNumber: issue.number, issueTitle: issue.title });
   }
 
   if (!issueId && !issue) {
+    logger.error("Missing required argument", { error: "--github-issue-id or --issue-file is required" });
     console.error("Error: --github-issue-id or --issue-file is required");
     console.error("");
     printUsage();
@@ -83,21 +95,33 @@ async function main(): Promise<void> {
   }
 
   // Start feedback server
+  logger.debug("Starting feedback server", { preferredPort: port });
   const feedbackServer = startFeedbackServer(port);
+  logger.debug("Feedback server started", { port: feedbackServer.port, reviewId: feedbackServer.reviewId, feedbackEndpoint: feedbackServer.feedbackEndpoint });
 
   try {
     if (issue) {
+      logger.info("Using issue from file", { issueNumber: issue.number, issueTitle: issue.title });
       console.log(`Using issue from file: #${issue.number} - ${issue.title}`);
     } else {
+      logger.info("Fetching GitHub issue", { issueId });
       console.log(`Fetching GitHub issue #${issueId}...`);
     }
 
+    logger.debug("Starting review orchestration", { issueId, diffBase, agent, feedbackEndpoint: feedbackServer.feedbackEndpoint });
     const result = await runReviewOrchestration({
       issueId: issueId!,
       issue,
       diffBase,
       agent,
       feedbackEndpoint: feedbackServer.feedbackEndpoint,
+    });
+    logger.debug("Review orchestration completed", {
+      reviewFolder: result.reviewFolder,
+      htmlPath: result.htmlPath,
+      metadataPath: result.metadataPath,
+      verdict: result.metadata.review?.verdict,
+      issueNumber: result.issue.number,
     });
 
     console.log("");
@@ -116,7 +140,10 @@ async function main(): Promise<void> {
     console.log("");
 
     // Wait for user feedback
+    logger.debug("Waiting for user feedback");
     const feedback: FeedbackPayload = await feedbackServer.waitForFeedback();
+    logger.info("User feedback received", { verdict: feedback.verdict, hasFeedback: !!feedback.feedback });
+    logger.debug("Feedback details", { feedback });
 
     console.log("");
     console.log("=".repeat(60));
@@ -129,8 +156,10 @@ async function main(): Promise<void> {
     console.log("=".repeat(60));
 
     // Exit with appropriate code
+    logger.debug("Exiting", { exitCode: feedback.verdict === "approve" ? 0 : 1 });
     process.exit(feedback.verdict === "approve" ? 0 : 1);
   } catch (err) {
+    logger.error("Review orchestration failed", { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined });
     console.error("Error:", err instanceof Error ? err.message : err);
     feedbackServer.stop();
     process.exit(1);
