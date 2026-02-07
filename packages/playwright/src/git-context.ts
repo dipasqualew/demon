@@ -12,6 +12,34 @@ export interface RepoContext {
 export interface GetRepoContextOptions {
   exec?: ExecFn;
   readFile?: ReadFileFn;
+  diffBase?: string;  // Base commit/branch for diff (auto-detected if not provided)
+}
+
+async function detectDefaultBase(exec: ExecFn, gitRoot: string): Promise<string | null> {
+  // Get current branch name
+  let currentBranch: string;
+  try {
+    currentBranch = (await exec(["git", "rev-parse", "--abbrev-ref", "HEAD"], gitRoot)).trim();
+  } catch {
+    return null; // Detached HEAD or other issue
+  }
+
+  // If on main/master, no base to compare against
+  if (currentBranch === "main" || currentBranch === "master") {
+    return null;
+  }
+
+  // Try to find main or master as base
+  for (const candidate of ["main", "master"]) {
+    try {
+      await exec(["git", "rev-parse", "--verify", candidate], gitRoot);
+      return candidate;
+    } catch {
+      // Branch doesn't exist, try next
+    }
+  }
+
+  return null;
 }
 
 const defaultExec: ExecFn = async (cmd, cwd) => {
@@ -37,12 +65,21 @@ export async function getRepoContext(
 
   const gitRoot = (await exec(["git", "rev-parse", "--show-toplevel"], demosDir)).trim();
 
+  // Determine the base for diff comparison
+  const diffBase = options?.diffBase ?? await detectDefaultBase(exec, gitRoot);
+
   let gitDiff: string;
-  const workingDiff = (await exec(["git", "diff", "HEAD"], gitRoot)).trim();
-  if (workingDiff.length > 0) {
-    gitDiff = workingDiff;
+  if (diffBase) {
+    // Use three-dot diff for merge-base comparison (shows changes on current branch)
+    gitDiff = (await exec(["git", "diff", `${diffBase}...HEAD`], gitRoot)).trim();
   } else {
-    gitDiff = (await exec(["git", "diff", "HEAD~1..HEAD"], gitRoot)).trim();
+    // Fallback: worktree diff or last commit
+    const workingDiff = (await exec(["git", "diff", "HEAD"], gitRoot)).trim();
+    if (workingDiff.length > 0) {
+      gitDiff = workingDiff;
+    } else {
+      gitDiff = (await exec(["git", "diff", "HEAD~1..HEAD"], gitRoot)).trim();
+    }
   }
 
   const lsOutput = (await exec(["git", "ls-files"], gitRoot)).trim();

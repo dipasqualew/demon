@@ -39,7 +39,7 @@ export function rejectFeedback(reviewId: string, error: Error): boolean {
 }
 
 interface ReviewToolDeps {
-  generateReview: (options: { directory: string; agent?: string; feedbackEndpoint?: string }) => Promise<{ htmlPath: string }>;
+  generateReview: (options: { directory: string; agent?: string; feedbackEndpoint?: string; diffBase?: string }) => Promise<{ htmlPath: string }>;
 }
 
 export async function executeReviewTool(
@@ -55,6 +55,7 @@ export async function executeReviewTool(
     directory: input.directory,
     agent: input.agent,
     feedbackEndpoint,
+    diffBase: input.diffBase,
   });
 
   // Create a promise that will be resolved when feedback is received

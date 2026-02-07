@@ -7,7 +7,7 @@ import type { ServerConfig } from "./types.ts";
 
 interface CreateServerOptions {
   config: ServerConfig;
-  generateReview: (options: { directory: string; agent?: string; feedbackEndpoint?: string }) => Promise<{ htmlPath: string }>;
+  generateReview: (options: { directory: string; agent?: string; feedbackEndpoint?: string; diffBase?: string }) => Promise<{ htmlPath: string }>;
 }
 
 export function createMcpServer(options: CreateServerOptions) {
@@ -25,11 +25,12 @@ export function createMcpServer(options: CreateServerOptions) {
     {
       directory: z.string().describe("Path to directory containing demo files (.webm or .jsonl)"),
       agent: z.string().optional().describe("Path to agent manifest for LLM invocation"),
+      diffBase: z.string().optional().describe("Base commit/branch for diff (auto-detects main/master if on feature branch)"),
     },
-    async ({ directory, agent }) => {
+    async ({ directory, agent, diffBase }) => {
       try {
         const result = await executeReviewTool(
-          { directory, agent },
+          { directory, agent, diffBase },
           config,
           { generateReview }
         );

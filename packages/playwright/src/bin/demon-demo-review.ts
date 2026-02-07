@@ -6,19 +6,23 @@ import { generateReview, discoverDemoFiles } from "../review-generator.ts";
 
 let dir: string | undefined;
 let agent: string | undefined;
+let diffBase: string | undefined;
 
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--agent") {
     agent = args[++i];
+  } else if (args[i] === "--base") {
+    diffBase = args[++i];
   } else if (!dir) {
     dir = args[i];
   }
 }
 
 if (!dir) {
-  console.error("Usage: demon-demo-review [--agent <path>] <directory>");
+  console.error("Usage: demon-demo-review [--agent <path>] [--base <ref>] <directory>");
   console.error("  Discovers .webm and .jsonl demo files in the given directory.");
+  console.error("  --base <ref>  Base commit/branch for diff (auto-detects main/master if on feature branch)");
   process.exit(1);
 }
 
@@ -43,7 +47,7 @@ for (const file of demoFiles) {
 
 try {
   console.log("Invoking claude to generate review metadata...");
-  const result = await generateReview({ directory: resolved, agent });
+  const result = await generateReview({ directory: resolved, agent, diffBase });
 
   console.log(`Review metadata written to ${result.metadataPath}`);
   console.log(resolve(result.htmlPath));

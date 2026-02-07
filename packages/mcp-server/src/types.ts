@@ -13,6 +13,7 @@ export interface PendingReview {
 export interface ReviewToolInput {
   directory: string;
   agent?: string;
+  diffBase?: string;  // Base commit/branch for diff (auto-detected if not provided)
 }
 
 export interface ReviewToolResult {

@@ -3,6 +3,7 @@ name: demo
 description: Record video demos of features using a manifest-driven subagent
 disable-model-invocation: true
 allowed-tools: Bash(git branch *), Bash(mkdir *), Bash(bunx demon-demo-review *), Write, Glob, Read, Task
+arguments: $ARGUMENTS
 interpolations:
   - "! git rev-parse --show-toplevel"
   - "! git branch --show-current 2>/dev/null | tr '/' '-' || echo 'unknown'"
@@ -14,6 +15,16 @@ interpolations:
 # /demo — Record video demos with manifest-driven subagent
 
 You are tasked with creating demos that showcase the feature the user just built. This skill uses a three-phase architecture to optimize token usage.
+
+## Arguments
+
+The skill accepts an optional `--base <ref>` argument to specify the base commit/branch for git diff comparison:
+
+- `/demo` — Auto-detects base branch (uses `main` or `master` when on a feature branch)
+- `/demo --base main` — Explicitly compare against `main`
+- `/demo --base abc123` — Compare against a specific commit
+
+The `$ARGUMENTS` variable contains any arguments passed to the skill.
 
 ## Phase 1: Planning (You do this)
 
@@ -202,10 +213,16 @@ After the subagent completes:
 
 ### 3.1 Generate review page
 
-Run `demon-demo-review` against the review folder (which contains both `assets` and `tests`):
+Run `demon-demo-review` against the review folder (which contains both `assets` and `tests`).
 
+If `$ARGUMENTS` is empty or not provided, let the tool auto-detect the base branch:
 ```bash
 bunx demon-demo-review <REVIEW_FOLDER>
+```
+
+If `$ARGUMENTS` contains `--base <ref>`, pass it through:
+```bash
+bunx demon-demo-review $ARGUMENTS <REVIEW_FOLDER>
 ```
 
 ### 3.2 Report to user

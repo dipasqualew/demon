@@ -30,6 +30,7 @@ export interface GenerateReviewOptions {
   agent?: string;
   feedbackEndpoint?: string;
   title?: string;
+  diffBase?: string;  // Base commit/branch for diff (auto-detected if not provided)
 }
 
 export interface GenerateReviewResult {
@@ -111,7 +112,7 @@ export function discoverDemoFiles(directory: string): DemoFile[] {
  * This is the main entry point for programmatic use.
  */
 export async function generateReview(options: GenerateReviewOptions): Promise<GenerateReviewResult> {
-  const { directory, agent, feedbackEndpoint, title = "Demo Review" } = options;
+  const { directory, agent, feedbackEndpoint, title = "Demo Review", diffBase } = options;
 
   const demoFiles = discoverDemoFiles(directory);
   const webUxDemos = demoFiles.filter((d) => d.type === "web-ux");
@@ -168,7 +169,7 @@ export async function generateReview(options: GenerateReviewOptions): Promise<Ge
   let gitDiff: string | undefined;
   let guidelines: string[] | undefined;
   try {
-    const repoContext = await getRepoContext(directory);
+    const repoContext = await getRepoContext(directory, { diffBase });
     gitDiff = repoContext.gitDiff;
     guidelines = repoContext.guidelines;
   } catch {
