@@ -20,9 +20,13 @@
   ],
   "bin": {
     "demon-demo-review": "dist/bin/demon-demo-review.js",
-    "demon-demo-init": "dist/bin/demon-demo-init.js"
+    "demon-demo-init": "dist/bin/demon-demo-init.js",
+    "demoon": "dist/bin/demoon.js"
   },
   "type": "module",
+  "dependencies": {
+    "@octokit/graphql": "^8.2.1"
+  },
   "peerDependencies": {
     "@playwright/test": ">=1.40.0"
   },

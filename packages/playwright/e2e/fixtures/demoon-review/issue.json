@@ -1,0 +1,7 @@
+{
+  "number": 42,
+  "title": "Add login functionality",
+  "body": "## Description\nAdd user login with email and password.\n\n## Acceptance Criteria\n- [ ] Users can enter email and password\n- [ ] Invalid credentials show error\n- [ ] Successful login redirects to dashboard",
+  "labels": ["feature", "auth"],
+  "state": "open"
+}

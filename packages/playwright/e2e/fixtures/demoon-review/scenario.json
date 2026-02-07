@@ -1,0 +1,12 @@
+{
+  "responses": [
+    {
+      "pattern": "demo presenter",
+      "message": "Demo files created successfully:\n- login-demo.webm\n- api-demo.jsonl"
+    },
+    {
+      "pattern": ".*",
+      "message": "{\"demos\":[{\"file\":\"login-demo.webm\",\"summary\":\"Demonstrates the login flow with valid credentials\"},{\"file\":\"api-demo.jsonl\",\"summary\":\"Shows API authentication logs\"}],\"review\":{\"summary\":\"Login functionality implemented correctly with proper error handling.\",\"highlights\":[\"Clean form validation\",\"Good error messages\"],\"verdict\":\"approve\",\"verdictReason\":\"All acceptance criteria are demonstrated in the demos.\",\"issues\":[{\"severity\":\"nit\",\"description\":\"Consider adding password visibility toggle.\"}]}}"
+    }
+  ]
+}

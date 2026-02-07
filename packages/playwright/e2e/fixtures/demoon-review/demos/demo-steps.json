@@ -1,0 +1,7 @@
+[
+  {"text": "Navigate to login page", "timestampSeconds": 0},
+  {"text": "Enter email address", "timestampSeconds": 2},
+  {"text": "Enter password", "timestampSeconds": 4},
+  {"text": "Click login button", "timestampSeconds": 6},
+  {"text": "Verify redirect to dashboard", "timestampSeconds": 8}
+]

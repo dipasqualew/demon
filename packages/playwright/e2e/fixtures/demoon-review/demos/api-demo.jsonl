@@ -1,0 +1,4 @@
+{"timestamp":"2024-01-15T10:30:00.000Z","level":"info","message":"POST /api/login - Request received"}
+{"timestamp":"2024-01-15T10:30:00.100Z","level":"info","message":"Validating credentials..."}
+{"timestamp":"2024-01-15T10:30:00.200Z","level":"info","message":"Authentication successful","demon__highlight":"User authenticated"}
+{"timestamp":"2024-01-15T10:30:00.300Z","level":"info","message":"Session created, redirecting to dashboard"}

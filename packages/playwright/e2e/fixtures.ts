@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 
 const PKG_DIR = resolve(import.meta.dirname, "..");
 const FIXTURES_DIR = join(import.meta.dirname, "fixtures", "review-metadata");
+const DEMOON_FIXTURES_DIR = join(import.meta.dirname, "fixtures", "demoon-review");
 
 type Fixtures = {
   workDir: string;
@@ -20,6 +21,9 @@ type Fixtures = {
   installedPackageDir: string;
   mockAgentPath: string;
   demoDir: string;
+  demoonReviewDir: string;
+  demoonMockAgentPath: string;
+  demoonIssueFilePath: string;
 };
 
 export const test = base.extend<Fixtures>({
@@ -101,7 +105,49 @@ export const test = base.extend<Fixtures>({
     chmodSync(agentPath, 0o755);
     await use(agentPath);
   },
+
+  demoonReviewDir: async ({ workDir }, use) => {
+    const repoDir = join(workDir, "demoon-repo");
+    mkdirSync(repoDir, { recursive: true });
+
+    // Init git repo
+    spawnSync("git", ["init"], { cwd: repoDir });
+    spawnSync("git", ["checkout", "-b", "feature-login"], { cwd: repoDir });
+    cpSync(join(DEMOON_FIXTURES_DIR, "before"), repoDir, { recursive: true });
+    spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@test", "add", "."], { cwd: repoDir });
+    spawnSync("git", ["-c", "user.name=test", "-c", "user.email=test@test", "commit", "-m", "initial"], { cwd: repoDir });
+
+    // Switch to after state (creates diff)
+    for (const entry of readdirSync(repoDir)) {
+      if (entry !== ".git") {
+        rmSync(join(repoDir, entry), { recursive: true, force: true });
+      }
+    }
+    cpSync(join(DEMOON_FIXTURES_DIR, "after"), repoDir, { recursive: true });
+
+    // Pre-create the assets folder with demo files (simulating what presenter would create)
+    const assetsDir = join(repoDir, ".demoon", "reviews", "feature-login", "assets");
+    mkdirSync(assetsDir, { recursive: true });
+    cpSync(join(DEMOON_FIXTURES_DIR, "demos"), assetsDir, { recursive: true });
+
+    await use(repoDir);
+  },
+
+  demoonMockAgentPath: async ({ workDir }, use) => {
+    const scenarioPath = join(DEMOON_FIXTURES_DIR, "scenario.json");
+    const agentPath = join(workDir, "demoon-agent.sh");
+    writeFileSync(
+      agentPath,
+      `#!/usr/bin/env bash\nexec mock-code run --scenario ${scenarioPath} "$@"\n`,
+    );
+    chmodSync(agentPath, 0o755);
+    await use(agentPath);
+  },
+
+  demoonIssueFilePath: async ({}, use) => {
+    await use(join(DEMOON_FIXTURES_DIR, "issue.json"));
+  },
 });
 
 export { expect } from "@playwright/test";
-export { FIXTURES_DIR, PKG_DIR };
+export { FIXTURES_DIR, DEMOON_FIXTURES_DIR, PKG_DIR };

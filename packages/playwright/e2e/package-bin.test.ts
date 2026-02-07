@@ -1,5 +1,5 @@
-import { test, expect, FIXTURES_DIR } from "./fixtures";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { test, expect, FIXTURES_DIR, DEMOON_FIXTURES_DIR } from "./fixtures";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -91,5 +91,51 @@ test.describe("demon-demo-init package binary", () => {
     const content = readFileSync(join(testDir, "example.demo.ts"), "utf-8");
     expect(content).not.toContain("old content");
     expect(content).toContain("DemoRecorder");
+  });
+});
+
+test.describe("demoon review package binary", () => {
+  test("generates review from issue file with mock agent", async ({
+    installedPackageDir,
+    demoonReviewDir,
+    demoonMockAgentPath,
+    demoonIssueFilePath,
+  }) => {
+    const bin = join(installedPackageDir, "node_modules", ".bin", "demoon");
+    const result = spawnSync(
+      bin,
+      ["review", "--issue-file", demoonIssueFilePath, "--agent", demoonMockAgentPath],
+      {
+        cwd: demoonReviewDir,
+        timeout: 30_000,
+      },
+    );
+
+    if (result.status !== 0) {
+      const stderr = result.stderr?.toString() ?? "";
+      const stdout = result.stdout?.toString() ?? "";
+      throw new Error(`Binary exited with code ${result.status}:\nstderr: ${stderr}\nstdout: ${stdout}`);
+    }
+
+    const stdout = result.stdout?.toString() ?? "";
+    expect(stdout).toContain("issue #42");
+    expect(stdout).toContain("Add login functionality");
+    expect(stdout).toContain("approve");
+
+    // Verify review files were created
+    const assetsDir = join(demoonReviewDir, ".demoon", "reviews", "feature-login", "assets");
+    expect(existsSync(join(assetsDir, "review.html"))).toBe(true);
+    expect(existsSync(join(assetsDir, "review-metadata.json"))).toBe(true);
+
+    // Verify metadata content
+    const metadata = JSON.parse(readFileSync(join(assetsDir, "review-metadata.json"), "utf-8"));
+    const expected = JSON.parse(readFileSync(join(DEMOON_FIXTURES_DIR, "expected-metadata.json"), "utf-8"));
+    expect(metadata).toEqual(expected);
+
+    // Verify HTML contains expected content
+    const html = readFileSync(join(assetsDir, "review.html"), "utf-8");
+    expect(html.toLowerCase()).toContain("<!doctype html>");
+    expect(html).toContain("login-demo.webm");
+    expect(html).toContain("api-demo.jsonl");
   });
 });

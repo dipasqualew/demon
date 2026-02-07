@@ -1,0 +1,34 @@
+{
+  "demos": [
+    {
+      "file": "login-demo.webm",
+      "type": "web-ux",
+      "summary": "Demonstrates the login flow with valid credentials",
+      "steps": [
+        {"text": "Navigate to login page", "timestampSeconds": 0},
+        {"text": "Enter email address", "timestampSeconds": 2},
+        {"text": "Enter password", "timestampSeconds": 4},
+        {"text": "Click login button", "timestampSeconds": 6},
+        {"text": "Verify redirect to dashboard", "timestampSeconds": 8}
+      ]
+    },
+    {
+      "file": "api-demo.jsonl",
+      "type": "log-based",
+      "summary": "Shows API authentication logs",
+      "steps": []
+    }
+  ],
+  "review": {
+    "summary": "Login functionality implemented correctly with proper error handling.",
+    "highlights": ["Clean form validation", "Good error messages"],
+    "verdict": "approve",
+    "verdictReason": "All acceptance criteria are demonstrated in the demos.",
+    "issues": [
+      {
+        "severity": "nit",
+        "description": "Consider adding password visibility toggle."
+      }
+    ]
+  }
+}

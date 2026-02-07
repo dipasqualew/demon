@@ -2,7 +2,7 @@
 name: demo
 description: Record video demos of features using a manifest-driven subagent
 disable-model-invocation: true
-allowed-tools: Bash(git branch *), Bash(mkdir *), Bash(bunx demon-demo-review *), Write, Glob, Read, Task
+allowed-tools: Bash(git branch *), Bash(mkdir *), Bash(bunx demon-demo-review *), Bash(bunx demoon review *), Write, Glob, Read, Task
 arguments: $ARGUMENTS
 interpolations:
   - "! git rev-parse --show-toplevel"
@@ -18,7 +18,20 @@ You are tasked with creating demos that showcase the feature the user just built
 
 ## Arguments
 
-The skill accepts an optional `--base <ref>` argument to specify the base commit/branch for git diff comparison:
+The skill accepts the following arguments:
+
+### GitHub Issue Mode (Shorthand)
+
+When a GitHub issue is provided, the skill uses `demoon review` to orchestrate demo generation directly from the issue:
+
+- `/demo --issue <id>` — Generate demos for GitHub issue #id
+- `/demo --issue 42 --base main` — With explicit base branch
+
+This mode is more token-efficient as it derives context from the issue instead of analyzing conversation history.
+
+### Standard Mode
+
+For creating demos from conversation context:
 
 - `/demo` — Auto-detects base branch (uses `main` or `master` when on a feature branch)
 - `/demo --base main` — Explicitly compare against `main`
@@ -26,7 +39,25 @@ The skill accepts an optional `--base <ref>` argument to specify the base commit
 
 The `$ARGUMENTS` variable contains any arguments passed to the skill.
 
-## Phase 1: Planning (You do this)
+## Quick Path: GitHub Issue Mode
+
+If `$ARGUMENTS` contains `--issue <id>`, run `demoon review` instead of the three-phase flow:
+
+```bash
+bunx demoon review --github-issue-id <id> [--base <ref>]
+```
+
+This will:
+1. Fetch the GitHub issue
+2. Run Presenter phase (create demos)
+3. Run Reviewer phase (validate against acceptance criteria)
+4. Generate review HTML
+
+Report the review HTML path to the user and exit.
+
+## Standard Mode: Three-Phase Architecture
+
+### Phase 1: Planning (You do this)
 
 ### 1.1 Pre-computed paths
 
@@ -82,7 +113,7 @@ Brief description of the feature being demonstrated.
 
 Use `Glob` to find `playwright.demo.config.ts` and include its path in the Configuration section.
 
-## Phase 2: Implementation (Subagent does this)
+### Phase 2: Implementation (Subagent does this)
 
 Use the `Task` tool to spawn a subagent that implements and runs the demos:
 
@@ -207,7 +238,7 @@ Report back with:
 
 ---
 
-## Phase 3: Finalization (You do this)
+### Phase 3: Finalization (You do this)
 
 After the subagent completes:
 

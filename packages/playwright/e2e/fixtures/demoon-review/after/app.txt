@@ -1,0 +1,12 @@
+// App with login
+import { LoginForm } from './login';
+
+export function App() {
+  const [user, setUser] = useState(null);
+
+  if (!user) {
+    return <LoginForm onLogin={setUser} />;
+  }
+
+  return <div>Welcome, {user.name}</div>;
+}
