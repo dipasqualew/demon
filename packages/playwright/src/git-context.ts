@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 
 export type ExecFn = (cmd: string[], cwd: string) => Promise<string>;
 export type ReadFileFn = (path: string) => string;
@@ -14,12 +15,13 @@ export interface GetRepoContextOptions {
 }
 
 const defaultExec: ExecFn = async (cmd, cwd) => {
-  const proc = Bun.spawnSync(cmd, { cwd });
-  if (proc.exitCode !== 0) {
-    const stderr = proc.stderr.toString().trim();
-    throw new Error(`Command failed (exit ${proc.exitCode}): ${cmd.join(" ")}${stderr ? `: ${stderr}` : ""}`);
+  const [command, ...args] = cmd;
+  const proc = spawnSync(command!, args, { cwd, encoding: "utf-8" });
+  if (proc.status !== 0) {
+    const stderr = (proc.stderr ?? "").trim();
+    throw new Error(`Command failed (exit ${proc.status}): ${cmd.join(" ")}${stderr ? `: ${stderr}` : ""}`);
   }
-  return proc.stdout.toString();
+  return proc.stdout ?? "";
 };
 
 const defaultReadFile: ReadFileFn = (path) => {

@@ -234,18 +234,24 @@ export function parseLlmResponse(raw: string): LlmReviewResponse {
   return parsed as LlmReviewResponse;
 }
 
+import { spawn } from "node:child_process";
+import { Readable } from "node:stream";
+
 function defaultSpawn(
   cmd: string[],
 ): { exitCode: Promise<number>; stdout: ReadableStream<Uint8Array> } {
   const [command, ...args] = cmd;
-  const proc = Bun.spawn([command!, ...args], {
-    stdout: "pipe",
-    stderr: "pipe",
+  const proc = spawn(command!, args, {
+    stdio: ["ignore", "pipe", "pipe"],
   });
-  return {
-    exitCode: proc.exited,
-    stdout: proc.stdout as unknown as ReadableStream<Uint8Array>,
-  };
+
+  const exitCode = new Promise<number>((resolve) => {
+    proc.on("close", (code) => resolve(code ?? 1));
+  });
+
+  const stdout = Readable.toWeb(proc.stdout!) as unknown as ReadableStream<Uint8Array>;
+
+  return { exitCode, stdout };
 }
 
 function concatUint8Arrays(arrays: Uint8Array[]): Uint8Array {
